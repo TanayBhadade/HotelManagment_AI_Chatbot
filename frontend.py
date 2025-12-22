@@ -1,9 +1,9 @@
 import streamlit as st
 import requests
 import os
+from auth import authenticate_user
 
 # --- CONFIGURATION ---
-# Ensure this matches the port in main.py
 API_URL = "http://127.0.0.1:8001"
 
 # --- PAGE SETUP ---
@@ -15,92 +15,33 @@ st.set_page_config(
 )
 
 
-# --- 🎨 CSS STYLING (FIXED VISIBILITY) ---
+# --- 🎨 CSS STYLING ---
 def add_bg_from_url():
     st.markdown(
         f"""
         <style>
-        /* 1. IMPORT FONT */
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
-
-        /* 2. GENERAL TEXT STYLING */
-        html, body, [class*="css"] {{
-            font-family: 'Poppins', sans-serif;
-        }}
-
-        /* 3. BACKGROUND IMAGE */
+        html, body, [class*="css"] {{ font-family: 'Poppins', sans-serif; }}
         .stApp {{
             background-image: url("https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=2070&auto=format&fit=crop");
-            background-attachment: fixed;
-            background-size: cover;
+            background-attachment: fixed; background-size: cover;
         }}
+        [data-testid="stSidebar"] {{ background-color: rgba(0, 0, 0, 0.85); border-right: 1px solid rgba(255, 215, 0, 0.3); }}
+        [data-testid="stSidebar"] .css-17lntkn, [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1 {{ color: #d4af37 !important; }}
 
-        /* 4. SIDEBAR STYLING */
-        [data-testid="stSidebar"] {{
-            background-color: rgba(0, 0, 0, 0.85);
-            border-right: 1px solid rgba(255, 215, 0, 0.3);
-        }}
+        /* Login Form Styling */
+        div[data-testid="stForm"] {{ background-color: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; border: 1px solid #d4af37; }}
 
-        /* Sidebar Text Color */
-        [data-testid="stSidebar"] .css-17lntkn, [data-testid="stSidebar"] p {{
-            color: #d4af37 !important;
-            font-size: 1.1rem;
-        }}
+        /* Chat & Metrics */
+        .stChatMessage {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 15px; padding: 10px; border-left: 5px solid #d4af37; color: black !important; }}
+        .stChatMessage p, .stChatMessage div {{ color: #000000 !important; }}
+        [data-testid="stMetric"] {{ background-color: rgba(255, 255, 255, 0.9); border-radius: 10px; text-align: center; color: black !important; }}
+        [data-testid="stMetricLabel"] {{ color: #444444 !important; }}
+        [data-testid="stMetricValue"] {{ color: #000000 !important; }}
 
-        /* 5. CHAT MESSAGES (FIXED: Force Black Text) */
-        .stChatMessage {{
-            background-color: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            padding: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 10px;
-            border-left: 5px solid #d4af37;
-            color: black !important;
-        }}
-
-        /* Force all paragraphs/spans inside chat to be black */
-        .stChatMessage p, .stChatMessage div, .stChatMessage span {{
-            color: #000000 !important;
-        }}
-
-        /* 6. METRIC CARDS */
-        [data-testid="stMetric"] {{
-            background-color: rgba(255, 255, 255, 0.9);
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            text-align: center;
-            color: black !important;
-        }}
-
-        /* Metric Labels */
-        [data-testid="stMetricLabel"] {{
-            color: #444444 !important;
-        }}
-
-        /* Metric Values */
-        [data-testid="stMetricValue"] {{
-            color: #000000 !important;
-        }}
-
-        /* Hide Default Header/Footer */
-        header {{visibility: hidden;}}
-        footer {{visibility: hidden;}}
-
-        /* Button Styling */
-        .stButton button {{
-            background-color: #d4af37;
-            color: black;
-            font-weight: bold;
-            border-radius: 20px;
-            border: none;
-            transition: all 0.3s ease;
-        }}
-        .stButton button:hover {{
-            background-color: #bfa15f;
-            transform: scale(1.05);
-        }}
-
+        /* Buttons */
+        .stButton button {{ background-color: #d4af37; color: black; font-weight: bold; border-radius: 20px; border: none; }}
+        .stButton button:hover {{ background-color: #bfa15f; transform: scale(1.05); }}
         </style>
         """,
         unsafe_allow_html=True
@@ -109,112 +50,126 @@ def add_bg_from_url():
 
 add_bg_from_url()
 
-# --- SIDEBAR (LOGIN LOGIC) ---
+# --- SESSION STATE & AUTH ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.user_role = None
+    st.session_state.username = None
+
+
+def login(username, password):
+    user = authenticate_user(username, password)
+    if user:
+        st.session_state.authenticated = True
+        st.session_state.user_role = user.role
+        st.session_state.username = user.username
+        st.rerun()
+    else:
+        st.error("❌ Invalid username or password")
+
+
+def logout():
+    st.session_state.authenticated = False
+    st.session_state.user_role = None
+    st.session_state.username = None
+    st.rerun()
+
+
+# --- SIDEBAR CONTENT ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/201/201623.png", width=80)
     st.title("Grand Hotel")
-    st.markdown("*Experience Luxury & AI*")
     st.markdown("---")
 
-    user_role = st.radio("Select Mode:", ["👤 Guest", "🔐 Admin / Staff"])
-    st.markdown("---")
+    if not st.session_state.authenticated:
+        st.subheader("🔐 Login Required")
+        with st.form("login_form"):
+            user = st.text_input("Username")
+            pw = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Login")
+            if submitted:
+                login(user, pw)
+        st.info("Default Logins:\n\nManager: `manager` / `admin123`\nGuest: `guest` / `guest123`")
 
-    if user_role == "🔐 Admin / Staff":
-        st.success("Admin Mode Active")
-        if st.button("📄 Generate PDF Report"):
-            with st.spinner("Generating..."):
-                try:
-                    res = requests.post(f"{API_URL}/trigger-report")
-                    if res.status_code == 200:
-                        st.success("✅ PDF Saved!")
-                    else:
-                        st.error("❌ Failed.")
-                except:
-                    st.error("❌ Connection Error.")
     else:
-        st.info("Guest Mode Active")
-        st.write("Book rooms, check rates, and get instant receipts.")
+        st.success(f"👤 {st.session_state.username}")
+        st.caption(f"Role: {st.session_state.user_role.upper()}")
 
-# --- MAIN PAGE LOGIC ---
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+        if st.session_state.user_role == "manager":
+            st.markdown("---")
+            st.subheader("⚡ Manager Tools")
+            if st.button("📄 Generate Report PDF"):
+                with st.spinner("Processing..."):
+                    try:
+                        requests.post(f"{API_URL}/trigger-report")
+                        st.success("Sent to Email!")
+                    except:
+                        st.error("Connection Failed")
 
-# --- 🔐 ADMIN DASHBOARD ---
-if user_role == "🔐 Admin / Staff":
-    st.title("📊 Manager Dashboard")
-    st.markdown("### 📈 Live Performance Metrics")
+        st.markdown("---")
+        if st.button("Logout"):
+            logout()
 
-    # VISUAL METRICS (Mock Data for UI Demo)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(label="💰 Today's Revenue", value="₹ 12,500", delta="+15%")
-    with col2:
-        st.metric(label="👥 Active Guests", value="8", delta="2 checking in")
-    with col3:
-        st.metric(label="🛏️ Occupancy Rate", value="75%", delta="-5%")
+# --- MAIN CONTENT AREA ---
+if not st.session_state.authenticated:
+    st.title("🏨 Welcome to Grand Hotel")
+    st.markdown("### Please login via the sidebar to continue.")
+    st.image("https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=2070", use_column_width=True)
 
-    st.markdown("---")
-
-# --- 👤 GUEST / CHAT INTERFACE ---
 else:
-    st.title("🛎️ Concierge Service")
-    st.markdown("Welcome! I am your AI assistant. How can I make your stay perfect?")
+    # === MANAGER DASHBOARD ===
+    if st.session_state.user_role == "manager":
+        st.title("📊 Manager Dashboard")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("💰 Today's Revenue", "₹ 12,500", "+15%")
+        with col2:
+            st.metric("👥 Active Guests", "8", "2 Check-ins")
+        with col3:
+            st.metric("🛏️ Occupancy", "75%", "-5%")
+        st.markdown("---")
+        st.info("Use the sidebar tools to generate daily reports.")
 
-# --- CHAT HISTORY ---
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"], avatar="🤵" if msg["role"] == "assistant" else "👤"):
-        st.markdown(msg["content"])
+    # === GUEST CHAT INTERFACE ===
+    else:
+        st.title("🛎️ Concierge Service")
 
-        # PDF Logic
-        if msg["role"] == "assistant" and ".pdf" in msg["content"]:
-            for word in msg["content"].split():
-                if word.endswith(".pdf"):
-                    filename = word.rstrip(".")
-                    filepath = os.path.join("receipts", filename)
-                    if os.path.exists(filepath):
-                        with open(filepath, "rb") as pdf_file:
-                            st.download_button(
-                                label=f"⬇️ Download {filename}",
-                                data=pdf_file,
-                                file_name=filename,
-                                mime="application/pdf",
-                                key=filename
-                            )
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
 
-# --- USER INPUT ---
-if prompt := st.chat_input("Ask me about rooms, booking, or services..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user", avatar="👤"):
-        st.markdown(prompt)
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"], avatar="🤵" if msg["role"] == "assistant" else "👤"):
+                st.markdown(msg["content"])
+                if msg["role"] == "assistant" and ".pdf" in msg["content"]:
+                    for word in msg["content"].split():
+                        if word.endswith(".pdf"):
+                            filename = word.rstrip(".")
+                            filepath = os.path.join("receipts", filename)
+                            if os.path.exists(filepath):
+                                with open(filepath, "rb") as pdf:
+                                    st.download_button("⬇️ Download Receipt", pdf, filename)
 
-    with st.chat_message("assistant", avatar="🤵"):
-        message_placeholder = st.empty()
-        with st.spinner("Thinking..."):
-            try:
-                response = requests.post(f"{API_URL}/chat", json={"message": prompt})
-                if response.status_code == 200:
-                    bot_reply = response.json().get("response", "Error")
-                else:
-                    bot_reply = f"❌ Error {response.status_code}"
-            except:
-                bot_reply = "❌ Connection Error. Is main.py running?"
+        if prompt := st.chat_input("How can I help you?"):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user", avatar="👤"):
+                st.markdown(prompt)
 
-            message_placeholder.markdown(bot_reply)
+            with st.chat_message("assistant", avatar="🤵"):
+                try:
+                    res = requests.post(f"{API_URL}/chat", json={"message": prompt})
+                    reply = res.json().get("response", "Error")
+                except:
+                    reply = "❌ Server Error. Is main.py running?"
+                st.markdown(reply)
 
-            # Check for PDF
-            if ".pdf" in bot_reply:
-                for word in bot_reply.split():
-                    if word.endswith(".pdf"):
-                        filename = word.rstrip(".")
-                        filepath = os.path.join("receipts", filename)
-                        if os.path.exists(filepath):
-                            with open(filepath, "rb") as pdf_file:
-                                st.download_button(
-                                    label="⬇️ Download Receipt",
-                                    data=pdf_file,
-                                    file_name=filename,
-                                    mime="application/pdf",
-                                    key="new_download_btn"
-                                )
+                # Check for PDF
+                if ".pdf" in reply:
+                    for word in reply.split():
+                        if word.endswith(".pdf"):
+                            filename = word.rstrip(".")
+                            filepath = os.path.join("receipts", filename)
+                            if os.path.exists(filepath):
+                                with open(filepath, "rb") as pdf:
+                                    st.download_button("⬇️ Download Receipt", pdf, filename, key="new_dl")
 
-    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+            st.session_state.messages.append({"role": "assistant", "content": reply})

@@ -4,7 +4,17 @@ from datetime import datetime
 
 Base = declarative_base()
 
+# --- NEW: USER MODEL FOR AUTHENTICATION ---
+class User(Base):
+    __tablename__ = "users"
 
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    role = Column(String)  # "manager" or "guest"
+
+# --- EXISTING MODELS ---
 class Room(Base):
     __tablename__ = "rooms"
 
@@ -13,13 +23,9 @@ class Room(Base):
     room_type = Column(String)
     price = Column(Float)
     description = Column(String)
-
-    # --- NEW: Room Capacity ---
     capacity = Column(Integer, default=2)
-    # --------------------------
 
     bookings = relationship("Booking", back_populates="room")
-
 
 class Guest(Base):
     __tablename__ = "guests"
@@ -31,7 +37,6 @@ class Guest(Base):
 
     bookings = relationship("Booking", back_populates="guest")
 
-
 class Booking(Base):
     __tablename__ = "bookings"
 
@@ -42,8 +47,6 @@ class Booking(Base):
     check_out_date = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="confirmed")
-
-    # --- Guest Counts ---
     adults = Column(Integer, default=1)
     children = Column(Integer, default=0)
 

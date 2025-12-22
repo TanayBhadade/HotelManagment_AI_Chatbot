@@ -277,3 +277,44 @@ def send_report_email(report_filepath):
     except Exception as e:
         print(f"❌ Email Error: {str(e)}")
         return False
+
+
+# --- TOOL 8: Send Receipt Email to Guest ---
+def send_receipt_email(receipt_filepath, guest_email, guest_name):
+    """Sends the booking receipt PDF to the guest via email."""
+    load_dotenv()
+
+    sender_email = os.getenv("EMAIL_SENDER")
+    sender_password = os.getenv("EMAIL_PASSWORD")
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+
+    if not all([sender_email, sender_password, smtp_server]):
+        print("❌ Email configuration missing in .env file")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = guest_email
+        msg['Subject'] = f"Your Grand Hotel Booking Confirmation"
+
+        body = f"Dear {guest_name},\n\nThank you for booking with Grand Hotel. Please find your receipt attached.\n\nWe look forward to welcoming you!\n\nBest regards,\nGrand Hotel Team"
+        msg.attach(MIMEText(body, 'plain'))
+
+        with open(receipt_filepath, "rb") as file:
+            attachment = MIMEApplication(file.read(), _subtype="pdf")
+            attachment.add_header('Content-Disposition', 'attachment', filename=os.path.basename(receipt_filepath))
+            msg.attach(attachment)
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+
+        print(f"✅ Receipt email sent to {guest_email}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Email Error: {str(e)}")
+        return False
