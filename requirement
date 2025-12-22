@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+langchain
+langchain-groq
+python-dotenv
+apscheduler
+fpdf
+streamlit
+requests
