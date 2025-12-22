@@ -3,6 +3,11 @@ from database.connection import SessionLocal
 from database.models import Room, Booking, Guest
 from fpdf import FPDF
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+from dotenv import load_dotenv
 
 
 # --- HELPER: PDF GENERATOR FOR RECEIPTS ---
@@ -86,7 +91,7 @@ def check_availability(start_date: str, end_date: str):
         db.close()
 
 
-# --- TOOL 2: Book Room (With Receipt Generation) ---
+# --- TOOL 2: Book Room (With Receipt & Email) ---
 def book_room(room_number: str, name: str, email: str, start_date: str, end_date: str, adults=1, children=0):
     db = SessionLocal()
     try:
@@ -130,18 +135,24 @@ def book_room(room_number: str, name: str, email: str, start_date: str, end_date
         )
         db.add(new_booking)
         db.commit()
-        db.refresh(new_booking)  # Get ID for receipt
+        db.refresh(new_booking)
 
-        # --- NEW: GENERATE RECEIPT ---
+        # --- 1. GENERATE RECEIPT ---
         receipt_file = generate_guest_receipt(new_booking.id)
+        receipt_path = os.path.join("receipts", receipt_file)
 
-        return f"Success! Room {room_number} booked for {name}. Receipt generated: {receipt_file}"
+        # --- 2. EMAIL RECEIPT TO GUEST (Check if this part is in your file!) ---
+        # Ensure 'send_receipt_email' is defined at the bottom of your tools.py
+        email_sent = send_receipt_email(receipt_path, email, name)
+
+        email_status = "and emailed to you" if email_sent else "(email delivery failed)"
+
+        return f"Success! Room {room_number} booked for {name}. Receipt generated {email_status}: {receipt_file}"
 
     except Exception as e:
         return f"Booking Failed: {str(e)}"
     finally:
         db.close()
-
 
 # --- TOOL 3: Get Booking Details ---
 def get_booking_details(email: str):
@@ -224,3 +235,45 @@ def get_todays_bookings():
         return "\n".join(report)
     finally:
         db.close()
+
+
+# --- TOOL 7: Send Report Email (NEW) ---
+def send_report_email(report_filepath):
+    """Sends the daily report PDF to the manager via email."""
+    load_dotenv()
+
+    sender_email = os.getenv("EMAIL_SENDER")
+    sender_password = os.getenv("EMAIL_PASSWORD")
+    manager_email = os.getenv("EMAIL_MANAGER")
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+
+    if not all([sender_email, sender_password, manager_email, smtp_server]):
+        print("❌ Email configuration missing in .env file")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = manager_email
+        msg['Subject'] = f"Daily Hotel Report - {datetime.now().strftime('%Y-%m-%d')}"
+
+        body = f"Please find attached the daily hotel report for {datetime.now().strftime('%Y-%m-%d')}."
+        msg.attach(MIMEText(body, 'plain'))
+
+        with open(report_filepath, "rb") as file:
+            attachment = MIMEApplication(file.read(), _subtype="pdf")
+            attachment.add_header('Content-Disposition', 'attachment', filename=os.path.basename(report_filepath))
+            msg.attach(attachment)
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+
+        print(f"✅ Email sent to {manager_email}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Email Error: {str(e)}")
+        return False
