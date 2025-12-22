@@ -1,0 +1,16 @@
+# Ignore Virtual Environment
+.venv/
+venv/
+.idea/
+
+# Ignore Keys & Database (Security!)
+.env
+hotel.db
+
+# Ignore Python Cache
+__pycache__/
+*.pyc
+
+# Ignore Generated Files
+receipts/
+reports/
