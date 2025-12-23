@@ -1,19 +1,17 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from agent.bot import chat_with_bot
-from agent.tools import save_daily_report_pdf, send_report_email  # Added import
+from agent.tools import save_daily_report_pdf, send_report_email
 from apscheduler.schedulers.background import BackgroundScheduler
 import uvicorn
 import datetime
 
-
 # --- CONFIG ---
 class ChatRequest(BaseModel):
     message: str
-
+    role: str = "guest"  # <--- NEW: Defaults to 'guest' if not sent
 
 app = FastAPI(title="Hotel AI API")
-
 
 # --- SCHEDULER TASK ---
 def generate_scheduled_pdf():
@@ -25,12 +23,10 @@ def generate_scheduled_pdf():
         print(f"✅ Report saved: {path}")
 
         # 2. Send Email
-        print("📧 [SYSTEM] Sending Email to Manager...")
-        email_sent = send_report_email(path)
-        if email_sent:
-            print("✅ Email sent successfully.")
-        else:
-            print("❌ Failed to send email.")
+        # (Uncomment the lines below when you are ready to send real emails)
+        # print("📧 [SYSTEM] Sending Email to Manager...")
+        # send_report_email(path)
+        # print("✅ Email sent successfully.")
 
     except Exception as e:
         print(f"❌ Report/Email Error: {e}")
@@ -47,7 +43,8 @@ scheduler.start()
 # --- ENDPOINTS ---
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
-    return {"response": chat_with_bot(request.message)}
+    # <--- NEW: Pass the 'role' to the bot function
+    return {"response": chat_with_bot(request.message, request.role)}
 
 
 @app.post("/trigger-report")

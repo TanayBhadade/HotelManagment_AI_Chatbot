@@ -4,7 +4,8 @@ import os
 from auth import authenticate_user
 
 # --- CONFIGURATION ---
-API_URL = "http://127.0.0.1:8001"
+# Allow dynamic URL for deployment, default to localhost
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8001")
 
 # --- PAGE SETUP ---
 st.set_page_config(
@@ -29,17 +30,14 @@ def add_bg_from_url():
         [data-testid="stSidebar"] {{ background-color: rgba(0, 0, 0, 0.85); border-right: 1px solid rgba(255, 215, 0, 0.3); }}
         [data-testid="stSidebar"] .css-17lntkn, [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1 {{ color: #d4af37 !important; }}
 
-        /* Login Form Styling */
         div[data-testid="stForm"] {{ background-color: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; border: 1px solid #d4af37; }}
 
-        /* Chat & Metrics */
         .stChatMessage {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 15px; padding: 10px; border-left: 5px solid #d4af37; color: black !important; }}
         .stChatMessage p, .stChatMessage div {{ color: #000000 !important; }}
         [data-testid="stMetric"] {{ background-color: rgba(255, 255, 255, 0.9); border-radius: 10px; text-align: center; color: black !important; }}
         [data-testid="stMetricLabel"] {{ color: #444444 !important; }}
         [data-testid="stMetricValue"] {{ color: #000000 !important; }}
 
-        /* Buttons */
         .stButton button {{ background-color: #d4af37; color: black; font-weight: bold; border-radius: 20px; border: none; }}
         .stButton button:hover {{ background-color: #bfa15f; transform: scale(1.05); }}
         </style>
@@ -94,18 +92,6 @@ with st.sidebar:
     else:
         st.success(f"👤 {st.session_state.username}")
         st.caption(f"Role: {st.session_state.user_role.upper()}")
-
-        if st.session_state.user_role == "manager":
-            st.markdown("---")
-            st.subheader("⚡ Manager Tools")
-            if st.button("📄 Generate Report PDF"):
-                with st.spinner("Processing..."):
-                    try:
-                        requests.post(f"{API_URL}/trigger-report")
-                        st.success("Sent to Email!")
-                    except:
-                        st.error("Connection Failed")
-
         st.markdown("---")
         if st.button("Logout"):
             logout()
@@ -117,26 +103,78 @@ if not st.session_state.authenticated:
     st.image("https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=2070", use_column_width=True)
 
 else:
+    # ==========================
     # === MANAGER DASHBOARD ===
+    # ==========================
     if st.session_state.user_role == "manager":
         st.title("📊 Manager Dashboard")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("💰 Today's Revenue", "₹ 12,500", "+15%")
-        with col2:
-            st.metric("👥 Active Guests", "8", "2 Check-ins")
-        with col3:
-            st.metric("🛏️ Occupancy", "75%", "-5%")
-        st.markdown("---")
-        st.info("Use the sidebar tools to generate daily reports.")
 
+        # NOTE: Dummy metrics removed.
+        st.info("💡 Tip: Use the 'AI Assistant' tab to get real-time Revenue and Occupancy stats.")
+
+        # TABS: Actions vs AI Assistant
+        tab1, tab2 = st.tabs(["⚡ Actions", "💬 AI Assistant"])
+
+        with tab1:
+            st.subheader("Reports & Controls")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📄 Generate PDF Report"):
+                    with st.spinner("Processing..."):
+                        try:
+                            requests.post(f"{API_URL}/trigger-report")
+                            st.success("Report Generated & Sent!")
+                        except:
+                            st.error("Connection Failed")
+            with col2:
+                st.write("*(More admin controls coming soon)*")
+
+        with tab2:
+            st.subheader("🤖 Manager AI Assistant")
+            st.caption("Ask about revenue, occupancy, bookings, or guest details.")
+
+            if "manager_messages" not in st.session_state:
+                st.session_state.manager_messages = []
+
+            # Display Chat History
+            for msg in st.session_state.manager_messages:
+                with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👨‍💼"):
+                    st.markdown(msg["content"])
+
+            # Chat Input
+            if prompt := st.chat_input("Ask about hotel status..."):
+                st.session_state.manager_messages.append({"role": "user", "content": prompt})
+                with st.chat_message("user", avatar="👨‍💼"):
+                    st.markdown(prompt)
+
+                with st.chat_message("assistant", avatar="🤖"):
+                    with st.spinner("Analyzing Data..."):
+                        try:
+                            # Pass 'manager' role to API
+                            res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "manager"},
+                                                timeout=30)
+                            if res.status_code == 200:
+                                reply = res.json().get("response", "Error")
+                            else:
+                                reply = f"❌ Server Error: {res.status_code}"
+                        except requests.exceptions.Timeout:
+                            reply = "⚠️ Timeout: Server took too long."
+                        except:
+                            reply = "❌ Connection Error."
+                        st.markdown(reply)
+
+                st.session_state.manager_messages.append({"role": "assistant", "content": reply})
+
+    # =============================
     # === GUEST CHAT INTERFACE ===
+    # =============================
     else:
-        st.title("🛎️ Grand Hotel Services ")
+        st.title("🛎️ Grand Hotel Concierge")
 
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
+        # Display History
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"], avatar="🤵" if msg["role"] == "assistant" else "👤"):
                 st.markdown(msg["content"])
@@ -149,20 +187,30 @@ else:
                                 with open(filepath, "rb") as pdf:
                                     st.download_button("⬇️ Download Receipt", pdf, filename)
 
+        # Handle New Input
         if prompt := st.chat_input("How can I help you?"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
                 st.markdown(prompt)
 
             with st.chat_message("assistant", avatar="🤵"):
-                try:
-                    res = requests.post(f"{API_URL}/chat", json={"message": prompt})
-                    reply = res.json().get("response", "Error")
-                except:
-                    reply = "❌ Server Error. Is main.py running?"
-                st.markdown(reply)
+                with st.spinner("Thinking..."):
+                    try:
+                        # Pass 'guest' role (default)
+                        res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "guest"}, timeout=30)
+                        if res.status_code == 200:
+                            reply = res.json().get("response", "Error")
+                        else:
+                            reply = f"❌ Server Error: {res.status_code}"
+                    except requests.exceptions.Timeout:
+                        reply = "⚠️ Error: The server took too long to respond. Please try again."
+                    except requests.exceptions.ConnectionError:
+                        reply = "❌ Connection Error. Is main.py running?"
+                    except Exception as e:
+                        reply = f"❌ Error: {str(e)}"
 
-                # Check for PDF
+                    st.markdown(reply)
+
                 if ".pdf" in reply:
                     for word in reply.split():
                         if word.endswith(".pdf"):

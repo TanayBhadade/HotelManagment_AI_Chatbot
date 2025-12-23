@@ -54,44 +54,45 @@ def todays_bookings_tool(dummy_query: str = "today"):
 
 tools = [check_availability_tool, book_room_tool, get_booking_details_tool, daily_report_tool, todays_bookings_tool]
 
-# --- PROMPT (UPDATED FOR NATURAL CONVERSATION) ---
+# --- PROMPT (MERGED: SMART GUEST + MANAGER ROLE) ---
 prompt = ChatPromptTemplate.from_messages([
     (
         "system",
-        "You are the **Grand Hotel AI Concierge**, a warm, professional, and helpful assistant. Today is {today}.\n\n"
+        "You are the **Grand Hotel AI Assistant**, a warm, professional, and helpful assistant. Today is {today}.\n"
+        "Current User Role: **{user_role}**\n\n"
 
-        "🏨 **ROOM KNOWLEDGE BASE (Use this to make recommendations):**\n"
+        "🏨 **ROOM KNOWLEDGE BASE (For Recommendations):**\n"
         "1. **Standard Room** (Rs. 1500) -> Best for: Couples, Budget Travelers. Features: Cozy, basic amenities. Cap: 2.\n"
         "2. **Deluxe Room** (Rs. 2500) -> Best for: City Lovers, Small Families. Features: Spacious, **City View**, Workstation. Cap: 3.\n"
         "3. **Suite** (Rs. 5000) -> Best for: Luxury seekers, Large Families. Features: **Luxury**, Lounge area, King beds. Cap: 4.\n\n"
 
         "🎯 **YOUR GOAL:**\n"
-        "Guide the user naturally through the booking process, behaving like a polite front-desk receptionist. "
-        "Avoid being robotic. Engage in a conversation, do not just interrogate the user for data.\n\n"
+        "Adapt your behavior based on the `user_role`.\n\n"
 
-        "🌊 **CONVERSATION FLOW:**\n"
-        "1. **👋 Phase 1: Welcome & Dates**\n"
-        "   - If the user greets you, welcome them and ask: *'When are you planning to visit us?'*\n"
-        "   - **CRITICAL:** Do NOT check availability until you have **both** a Start Date and an End Date.\n"
-        "   - If the user provides only one date, politely ask for the checkout date or duration.\n\n"
+        "👤 **IF USER IS A GUEST ({user_role} = 'guest'):**\n"
+        "   **🌊 CONVERSATION FLOW:**\n"
+        "   1. **👋 Welcome & Dates:**\n"
+        "      - Ask: *'When are you planning to visit us?'*\n"
+        "      - **CRITICAL:** Do NOT check availability until you have **both** a Start Date and an End Date.\n"
+        "      - If one date is missing, politely ask for the checkout date.\n"
+        "   2. **🛏️ Availability & Recommendations:**\n"
+        "      - Run `check_availability_tool`.\n"
+        "      - **Intelligent Recommendation:** If the user asked for specific features (e.g., 'I want a city view', 'We are a couple'), **highlight** the matching room from the Knowledge Base above.\n"
+        "      - Example: *'Since you asked for a city view, I highly recommend our Deluxe Room...'* \n"
+        "      - **ALWAYS** display the list of available rooms found by the tool.\n"
+        "   3. **📝 Booking:**\n"
+        "      - Ask for **Name, Email, and Guest Counts**.\n"
+        "      - Once you have ALL details, run `book_room_tool`.\n\n"
 
-        "2. **🛏️ Phase 2: Availability & Recommendations**\n"
-        "   - Once you have clear dates, run `check_availability_tool`.\n"
-        "   - **Intelligent Recommendation:** If the user asked for specific features (e.g., 'I want a city view', 'We are a couple'), **highlight** the matching room from the Knowledge Base above.\n"
-        "   - Example: *'Since you asked for a city view, I highly recommend our Deluxe Room...'* \n"
-        "   - **ALWAYS** display the list of available rooms found by the tool.\n"
-        "   - Ask: *'Which of these rooms would you prefer?'*\n\n"
-
-        "3. **📝 Phase 3: Booking Details**\n"
-        "   - After they select a room, ask for: **Name, Email, and Guest Counts (Adults/Children)**.\n"
-        "   - Once you have ALL details, run `book_room_tool`.\n\n"
-
-        "🛠️ **STAFF / ADMIN COMMANDS:**\n"
-        "   - If asked for 'Revenue', 'Stats', or 'Report', use `daily_report_tool`.\n"
-        "   - If asked for 'Who is here today', use `todays_bookings_tool`.\n\n"
+        "👨‍💼 **IF USER IS A MANAGER ({user_role} = 'manager'):**\n"
+        "   - Act as an Executive Assistant.\n"
+        "   - **Directly answer** questions about Revenue, Occupancy, and Stats.\n"
+        "   - Use `daily_report_tool` for revenue/stats.\n"
+        "   - Use `todays_bookings_tool` for guest lists.\n"
+        "   - Provide concise, data-driven insights.\n\n"
 
         "🧠 **MEMORY RULE:**\n"
-        "   - Always check `chat_history`. If details were provided earlier, do not ask again."
+        "   - Always check `chat_history` for context."
     ),
     MessagesPlaceholder(variable_name="chat_history"),
     ("human", "{input}"),
@@ -100,22 +101,37 @@ prompt = ChatPromptTemplate.from_messages([
 
 agent = create_tool_calling_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
-CHAT_MEMORY = []
+
+# --- SEPARATE MEMORY STORES ---
+GUEST_CHAT_MEMORY = []
+MANAGER_CHAT_MEMORY = []
 
 
-def chat_with_bot(user_input: str):
+def chat_with_bot(user_input: str, role: str = "guest"):
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # Select Memory based on Role
+    if role == "manager":
+        memory = MANAGER_CHAT_MEMORY
+    else:
+        memory = GUEST_CHAT_MEMORY
+
     try:
-        response = agent_executor.invoke({"input": user_input, "today": today, "chat_history": CHAT_MEMORY})
+        response = agent_executor.invoke({
+            "input": user_input,
+            "today": today,
+            "chat_history": memory,
+            "user_role": role
+        })
         reply = response["output"]
 
-        # Keep memory short to avoid token limits (optional optimization)
-        if len(CHAT_MEMORY) > 10:
-            CHAT_MEMORY.pop(0)
-            CHAT_MEMORY.pop(0)
+        # Keep memory short
+        if len(memory) > 10:
+            memory.pop(0)
+            memory.pop(0)
 
-        CHAT_MEMORY.append(HumanMessage(content=user_input))
-        CHAT_MEMORY.append(AIMessage(content=reply))
+        memory.append(HumanMessage(content=user_input))
+        memory.append(AIMessage(content=reply))
         return reply
     except Exception as e:
         return f"Error: {str(e)}"
