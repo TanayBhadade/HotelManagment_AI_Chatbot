@@ -4,7 +4,6 @@ from datetime import datetime
 
 Base = declarative_base()
 
-# --- NEW: USER MODEL FOR AUTHENTICATION ---
 class User(Base):
     __tablename__ = "users"
 
@@ -14,7 +13,6 @@ class User(Base):
     hashed_password = Column(String)
     role = Column(String)  # "manager" or "guest"
 
-# --- EXISTING MODELS ---
 class Room(Base):
     __tablename__ = "rooms"
 

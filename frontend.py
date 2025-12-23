@@ -132,7 +132,7 @@ else:
 
     # === GUEST CHAT INTERFACE ===
     else:
-        st.title("🛎️ Concierge Service")
+        st.title("🛎️ Grand Hotel Services ")
 
         if "messages" not in st.session_state:
             st.session_state.messages = []

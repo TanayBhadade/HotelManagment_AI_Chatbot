@@ -6,7 +6,7 @@ from database.connection import engine, SessionLocal
 from database.models import Base, Room, Guest, Booking, User
 from auth import hash_password  # Import our new auth tool
 
-# --- CONFIGURATION ---
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -56,9 +56,24 @@ def seed_users(db):
 def seed_rooms(db):
     """Populates room inventory."""
     room_config = [
-        {"type": "Standard", "price": 1500.0, "capacity": 2, "count": 5, "desc": "Cozy room for couples."},
-        {"type": "Deluxe", "price": 2500.0, "capacity": 3, "count": 5, "desc": "Spacious room with city view."},
-        {"type": "Suite", "price": 5000.0, "capacity": 4, "count": 2, "desc": "Luxury suite with lounge."},
+        {"type": "Standard Queen", "price": 1400.0, "capacity": 2, "count": 6,
+         "desc": "Cozy queen bed, great for couples."},
+        {"type": "Standard Twin", "price": 1450.0, "capacity": 2, "count": 4,
+         "desc": "Two twin beds, perfect for friends."},
+        {"type": "Deluxe King", "price": 2600.0, "capacity": 3, "count": 5,
+         "desc": "King bed with city view and a lounge chair."},
+        {"type": "Deluxe Family", "price": 3200.0, "capacity": 4, "count": 4,
+         "desc": "King + sofa bed, mini living area—family friendly."},
+        {"type": "Executive", "price": 3800.0, "capacity": 2, "count": 3,
+         "desc": "Quiet floor, workspace, premium amenities."},
+        {"type": "Studio Suite", "price": 4200.0, "capacity": 3, "count": 3,
+         "desc": "Open-plan suite with seating area."},
+        {"type": "One-Bedroom Suite", "price": 5200.0, "capacity": 4, "count": 2,
+         "desc": "Separate bedroom + living room, great for longer stays."},
+        {"type": "Accessible King", "price": 2400.0, "capacity": 2, "count": 2,
+         "desc": "Accessible layout, roll-in shower, wider clearances."},
+        {"type": "Penthouse", "price": 9500.0, "capacity": 4, "count": 1,
+         "desc": "Top-floor luxury, terrace, sweeping views."},
     ]
     rooms_to_add = []
     room_counter = 100

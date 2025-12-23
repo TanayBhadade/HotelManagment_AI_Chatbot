@@ -91,6 +91,9 @@ def check_availability(start_date: str, end_date: str):
         db.close()
 
 
+
+
+
 # --- TOOL 2: Book Room (With Receipt & Email) ---
 def book_room(room_number: str, name: str, email: str, start_date: str, end_date: str, adults=1, children=0):
     db = SessionLocal()
