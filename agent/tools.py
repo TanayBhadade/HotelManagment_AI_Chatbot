@@ -8,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from dotenv import load_dotenv
+from langchain.tools import tool  # <--- NEW IMPORT for the room tool
 
 
 # --- HELPER: PDF GENERATOR FOR RECEIPTS ---
@@ -91,9 +92,6 @@ def check_availability(start_date: str, end_date: str):
         db.close()
 
 
-
-
-
 # --- TOOL 2: Book Room (With Receipt & Email) ---
 def book_room(room_number: str, name: str, email: str, start_date: str, end_date: str, adults=1, children=0):
     db = SessionLocal()
@@ -144,10 +142,8 @@ def book_room(room_number: str, name: str, email: str, start_date: str, end_date
         receipt_file = generate_guest_receipt(new_booking.id)
         receipt_path = os.path.join("receipts", receipt_file)
 
-        # --- 2. EMAIL RECEIPT TO GUEST (Check if this part is in your file!) ---
-        # Ensure 'send_receipt_email' is defined at the bottom of your tools.py
+        # --- 2. EMAIL RECEIPT TO GUEST ---
         email_sent = send_receipt_email(receipt_path, email, name)
-
         email_status = "and emailed to you" if email_sent else "(email delivery failed)"
 
         return f"Success! Room {room_number} booked for {name}. Receipt generated {email_status}: {receipt_file}"
@@ -156,6 +152,7 @@ def book_room(room_number: str, name: str, email: str, start_date: str, end_date
         return f"Booking Failed: {str(e)}"
     finally:
         db.close()
+
 
 # --- TOOL 3: Get Booking Details ---
 def get_booking_details(email: str):
@@ -207,8 +204,9 @@ def save_daily_report_pdf():
     pdf.cell(200, 10, txt="Daily Business Report", ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Arial", size=12)
+    # latin-1 encoding to prevent crashes with currency symbols
     for line in report_text.split("\n"):
-        pdf.cell(200, 10, txt=line, ln=True)
+        pdf.cell(200, 10, txt=line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
 
     filename = f"daily_report_{datetime.now().strftime('%Y-%m-%d')}.pdf"
     if not os.path.exists("reports"): os.makedirs("reports")
@@ -240,7 +238,7 @@ def get_todays_bookings():
         db.close()
 
 
-# --- TOOL 7: Send Report Email (NEW) ---
+# --- TOOL 7: Send Report Email (Manager) ---
 def send_report_email(report_filepath):
     """Sends the daily report PDF to the manager via email."""
     load_dotenv()
@@ -269,7 +267,8 @@ def send_report_email(report_filepath):
             attachment.add_header('Content-Disposition', 'attachment', filename=os.path.basename(report_filepath))
             msg.attach(attachment)
 
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
+        # Added timeout to prevent hanging
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(sender_email, sender_password)
             server.send_message(msg)
@@ -282,7 +281,7 @@ def send_report_email(report_filepath):
         return False
 
 
-# --- TOOL 8: Send Receipt Email to Guest ---
+# --- TOOL 8: Send Receipt Email (Guest) ---
 def send_receipt_email(receipt_filepath, guest_email, guest_name):
     """Sends the booking receipt PDF to the guest via email."""
     load_dotenv()
@@ -310,7 +309,8 @@ def send_receipt_email(receipt_filepath, guest_email, guest_name):
             attachment.add_header('Content-Disposition', 'attachment', filename=os.path.basename(receipt_filepath))
             msg.attach(attachment)
 
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
+        # Added timeout
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(sender_email, sender_password)
             server.send_message(msg)
@@ -321,3 +321,31 @@ def send_receipt_email(receipt_filepath, guest_email, guest_name):
     except Exception as e:
         print(f"❌ Email Error: {str(e)}")
         return False
+
+
+# --- TOOL 9: Dynamic Room Info (NEW) ---
+@tool
+def get_room_info_tool(dummy_query: str = "rooms"):
+    """
+    Fetches the current list of room types, prices, descriptions, and capacities from the DB.
+    Use this when the user asks about room options, amenities, or recommendations.
+    """
+    db = SessionLocal()
+    try:
+        # Group by room_type to get unique categories
+        rooms = db.query(Room.room_type, Room.price, Room.capacity, Room.description) \
+            .group_by(Room.room_type).all()
+
+        if not rooms:
+            return "No rooms found in the database."
+
+        knowledge_base = []
+        for r in rooms:
+            line = f"- **{r.room_type}** (Rs. {r.price}) -> {r.description} (Cap: {r.capacity})"
+            knowledge_base.append(line)
+
+        return "\n".join(knowledge_base)
+    except Exception as e:
+        return f"Error loading rooms: {str(e)}"
+    finally:
+        db.close()

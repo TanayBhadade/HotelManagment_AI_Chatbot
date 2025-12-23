@@ -92,6 +92,19 @@ with st.sidebar:
     else:
         st.success(f"👤 {st.session_state.username}")
         st.caption(f"Role: {st.session_state.user_role.upper()}")
+
+        # MANAGER ACTIONS (Moved to Sidebar to keep main view clean)
+        if st.session_state.user_role == "manager":
+            st.markdown("---")
+            st.subheader("⚡ Manager Actions")
+            if st.button("📄 Email Daily Report"):
+                with st.spinner("Generating..."):
+                    try:
+                        requests.post(f"{API_URL}/trigger-report")
+                        st.success("Report Sent!")
+                    except:
+                        st.error("Connection Failed")
+
         st.markdown("---")
         if st.button("Logout"):
             logout()
@@ -109,61 +122,42 @@ else:
     if st.session_state.user_role == "manager":
         st.title("📊 Manager Dashboard")
 
-        # NOTE: Dummy metrics removed.
-        st.info("💡 Tip: Use the 'AI Assistant' tab to get real-time Revenue and Occupancy stats.")
+        st.info("💡 **Tip:** Ask the AI below for real-time Revenue, Occupancy, or Guest Lists.")
+        st.markdown("---")
 
-        # TABS: Actions vs AI Assistant
-        tab1, tab2 = st.tabs(["⚡ Actions", "💬 AI Assistant"])
+        # CHAT INTERFACE (Main View - No Tabs)
+        st.subheader("🤖 AI Executive Assistant")
 
-        with tab1:
-            st.subheader("Reports & Controls")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("📄 Generate PDF Report"):
-                    with st.spinner("Processing..."):
-                        try:
-                            requests.post(f"{API_URL}/trigger-report")
-                            st.success("Report Generated & Sent!")
-                        except:
-                            st.error("Connection Failed")
-            with col2:
-                st.write("*(More admin controls coming soon)*")
+        if "manager_messages" not in st.session_state:
+            st.session_state.manager_messages = []
 
-        with tab2:
-            st.subheader("🤖 Manager AI Assistant")
-            st.caption("Ask about revenue, occupancy, bookings, or guest details.")
+        # Display Chat History (Shows up in the main area)
+        for msg in st.session_state.manager_messages:
+            with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👨‍💼"):
+                st.markdown(msg["content"])
 
-            if "manager_messages" not in st.session_state:
-                st.session_state.manager_messages = []
+        # Chat Input (Pins to bottom automatically)
+        if prompt := st.chat_input("Ask about today's revenue, guest list, or availability..."):
+            st.session_state.manager_messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user", avatar="👨‍💼"):
+                st.markdown(prompt)
 
-            # Display Chat History
-            for msg in st.session_state.manager_messages:
-                with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👨‍💼"):
-                    st.markdown(msg["content"])
+            with st.chat_message("assistant", avatar="🤖"):
+                with st.spinner("Analyzing Database..."):
+                    try:
+                        # Pass 'manager' role to API
+                        res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "manager"}, timeout=30)
+                        if res.status_code == 200:
+                            reply = res.json().get("response", "Error")
+                        else:
+                            reply = f"❌ Server Error: {res.status_code}"
+                    except requests.exceptions.Timeout:
+                        reply = "⚠️ Timeout: Server took too long."
+                    except:
+                        reply = "❌ Connection Error. Is main.py running?"
+                    st.markdown(reply)
 
-            # Chat Input
-            if prompt := st.chat_input("Ask about hotel status..."):
-                st.session_state.manager_messages.append({"role": "user", "content": prompt})
-                with st.chat_message("user", avatar="👨‍💼"):
-                    st.markdown(prompt)
-
-                with st.chat_message("assistant", avatar="🤖"):
-                    with st.spinner("Analyzing Data..."):
-                        try:
-                            # Pass 'manager' role to API
-                            res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "manager"},
-                                                timeout=30)
-                            if res.status_code == 200:
-                                reply = res.json().get("response", "Error")
-                            else:
-                                reply = f"❌ Server Error: {res.status_code}"
-                        except requests.exceptions.Timeout:
-                            reply = "⚠️ Timeout: Server took too long."
-                        except:
-                            reply = "❌ Connection Error."
-                        st.markdown(reply)
-
-                st.session_state.manager_messages.append({"role": "assistant", "content": reply})
+            st.session_state.manager_messages.append({"role": "assistant", "content": reply})
 
     # =============================
     # === GUEST CHAT INTERFACE ===
@@ -188,7 +182,7 @@ else:
                                     st.download_button("⬇️ Download Receipt", pdf, filename)
 
         # Handle New Input
-        if prompt := st.chat_input("How can I help you?"):
+        if prompt := st.chat_input("How can I help you today?"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
                 st.markdown(prompt)
@@ -203,7 +197,7 @@ else:
                         else:
                             reply = f"❌ Server Error: {res.status_code}"
                     except requests.exceptions.Timeout:
-                        reply = "⚠️ Error: The server took too long to respond. Please try again."
+                        reply = "⚠️ Error: The server took too long to respond."
                     except requests.exceptions.ConnectionError:
                         reply = "❌ Connection Error. Is main.py running?"
                     except Exception as e:
