@@ -8,7 +8,14 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from dotenv import load_dotenv
-from langchain.tools import tool  # <--- NEW IMPORT for the room tool
+from langchain.tools import tool
+from datetime import datetime, date, time, timedelta
+from database.connection import SessionLocal
+from database.models import Booking, Room, Guest
+from datetime import datetime, date, time, timedelta
+from database.connection import SessionLocal
+from database.models import Booking, Room, Guest
+# <--- NEW IMPORT for the room tool
 
 
 # --- HELPER: PDF GENERATOR FOR RECEIPTS ---
@@ -347,5 +354,65 @@ def get_room_info_tool(dummy_query: str = "rooms"):
         return "\n".join(knowledge_base)
     except Exception as e:
         return f"Error loading rooms: {str(e)}"
+    finally:
+        db.close()
+
+
+def get_todays_checkins():
+    """Returns a list of guests checking in today."""
+    db = SessionLocal()
+    try:
+        today = date.today()
+        # Range: Midnight today to Midnight tomorrow
+        start_dt = datetime.combine(today, time.min)
+        end_dt = datetime.combine(today + timedelta(days=1), time.min)
+
+        bookings = db.query(Booking).filter(
+            Booking.check_in_date >= start_dt,
+            Booking.check_in_date < end_dt
+        ).all()
+
+        if not bookings:
+            return "No check-ins scheduled for today."
+
+        lines = [f"📅 **Check-ins for {today}:**"]
+        for b in bookings:
+            guest = db.query(Guest).filter(Guest.id == b.guest_id).first()
+            room = db.query(Room).filter(Room.id == b.room_id).first()
+            lines.append(f"- Room {room.room_number}: {guest.name} ({b.adults} Adults, {b.children} Children)")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error fetching check-ins: {str(e)}"
+    finally:
+        db.close()
+
+
+def get_upcoming_bookings():
+    """Returns a list of all current and future bookings."""
+    db = SessionLocal()
+    try:
+        today = date.today()
+        # Get bookings where checkout is today or future
+        bookings = db.query(Booking).filter(
+            Booking.check_out_date >= today
+        ).order_by(Booking.check_in_date).all()
+
+        if not bookings:
+            return "No upcoming bookings found in the system."
+
+        lines = ["📅 **Upcoming Booking Schedule:**"]
+        for b in bookings:
+            room = db.query(Room).filter(Room.id == b.room_id).first()
+            guest = db.query(Guest).filter(Guest.id == b.guest_id).first()
+
+            start_str = b.check_in_date.strftime("%Y-%m-%d")
+            end_str = b.check_out_date.strftime("%Y-%m-%d")
+
+            lines.append(f"- **Room {room.room_number}** booked for **{guest.name}** from {start_str} to {end_str}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error fetching schedule: {str(e)}"
     finally:
         db.close()

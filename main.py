@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from agent.bot import chat_with_bot
-from agent.tools import save_daily_report_pdf, book_room  # <--- Import book_room
+# Import clear_memory so we can wipe chat history on logout
+from agent.bot import chat_with_bot, clear_memory
+from agent.tools import save_daily_report_pdf, book_room
 from apscheduler.schedulers.background import BackgroundScheduler
 import uvicorn
 import datetime
@@ -11,7 +12,6 @@ class ChatRequest(BaseModel):
     message: str
     role: str = "guest"
 
-# NEW: Booking Request Model
 class BookingRequest(BaseModel):
     room_number: str
     name: str
@@ -21,9 +21,13 @@ class BookingRequest(BaseModel):
     adults: int = 1
     children: int = 0
 
+# NEW: Request model for resetting memory
+class ResetRequest(BaseModel):
+    role: str
+
 app = FastAPI(title="Hotel AI API")
 
-# --- SCHEDULER TASK (Unchanged) ---
+# --- SCHEDULER TASK ---
 def generate_scheduled_pdf():
     print("\n📄 [SYSTEM] Generating Daily PDF Report...")
     try:
@@ -55,6 +59,13 @@ async def book_endpoint(req: BookingRequest):
 async def trigger_report():
     generate_scheduled_pdf()
     return {"status": "PDF Generated & Emailed"}
+
+# --- NEW ENDPOINT: RESET CHAT MEMORY ---
+@app.post("/reset")
+async def reset_endpoint(req: ResetRequest):
+    """Clears the chat history for a specific role (manager or guest)."""
+    clear_memory(req.role)
+    return {"status": f"Memory cleared for role: {req.role}"}
 
 if __name__ == "__main__":
     print("🚀 Server starting on Port 8001...")
