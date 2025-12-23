@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from agent.bot import chat_with_bot
-from agent.tools import save_daily_report_pdf, send_report_email
+from agent.tools import save_daily_report_pdf, book_room  # <--- Import book_room
 from apscheduler.schedulers.background import BackgroundScheduler
 import uvicorn
 import datetime
@@ -9,49 +9,52 @@ import datetime
 # --- CONFIG ---
 class ChatRequest(BaseModel):
     message: str
-    role: str = "guest"  # <--- NEW: Defaults to 'guest' if not sent
+    role: str = "guest"
+
+# NEW: Booking Request Model
+class BookingRequest(BaseModel):
+    room_number: str
+    name: str
+    email: str
+    start_date: str
+    end_date: str
+    adults: int = 1
+    children: int = 0
 
 app = FastAPI(title="Hotel AI API")
 
-# --- SCHEDULER TASK ---
+# --- SCHEDULER TASK (Unchanged) ---
 def generate_scheduled_pdf():
-    """Runs at 12:00 PM to save PDF report and email it."""
     print("\n📄 [SYSTEM] Generating Daily PDF Report...")
     try:
-        # 1. Generate PDF
         path = save_daily_report_pdf()
         print(f"✅ Report saved: {path}")
-
-        # 2. Send Email
-        # (Uncomment the lines below when you are ready to send real emails)
-        # print("📧 [SYSTEM] Sending Email to Manager...")
-        # send_report_email(path)
-        # print("✅ Email sent successfully.")
-
     except Exception as e:
         print(f"❌ Report/Email Error: {e}")
 
-
 scheduler = BackgroundScheduler()
-# Schedule for 12:00 PM Daily
 scheduler.add_job(generate_scheduled_pdf, 'cron', hour=12, minute=0)
-# Run immediately + 5 seconds for TESTING
-scheduler.add_job(generate_scheduled_pdf, 'date', run_date=datetime.datetime.now() + datetime.timedelta(seconds=5))
 scheduler.start()
-
 
 # --- ENDPOINTS ---
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
-    # <--- NEW: Pass the 'role' to the bot function
     return {"response": chat_with_bot(request.message, request.role)}
 
+@app.post("/book")
+async def book_endpoint(req: BookingRequest):
+    """Direct booking endpoint for the Streamlit Form"""
+    result = book_room(
+        req.room_number, req.name, req.email,
+        req.start_date, req.end_date,
+        req.adults, req.children
+    )
+    return {"status": result}
 
 @app.post("/trigger-report")
 async def trigger_report():
     generate_scheduled_pdf()
     return {"status": "PDF Generated & Emailed"}
-
 
 if __name__ == "__main__":
     print("🚀 Server starting on Port 8001...")

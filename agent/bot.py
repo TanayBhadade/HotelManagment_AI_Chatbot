@@ -53,6 +53,7 @@ def todays_bookings_tool(dummy_query: str = "today"):
     return get_todays_bookings()
 
 
+# List of tools provided to the agent
 tools = [
     check_availability_tool,
     book_room_tool,
@@ -62,7 +63,8 @@ tools = [
     get_room_info_tool
 ]
 
-# --- PROMPT (UPDATED WITH STRICT MANAGER COMMANDS) ---
+# --- PROMPT DEFINITION ---
+# This must be defined BEFORE the 'agent = ...' line below.
 prompt = ChatPromptTemplate.from_messages([
     (
         "system",
@@ -81,8 +83,12 @@ prompt = ChatPromptTemplate.from_messages([
         "   3. **🛏️ Availability:**\n"
         "      - Ask for Dates (Start & End).\n"
         "      - Run `check_availability_tool`.\n"
-        "   4. **📝 Booking:**\n"
-        "      - Ask for Name, Email, Counts -> Run `book_room_tool`.\n\n"
+        "      - **ALWAYS** copy-paste the exact list of available rooms returned. Do NOT summarize.\n"
+        "   4. **📝 Booking (HYBRID MODE):**\n"
+        "      - Once the user says 'I want to book [Room X]' or selects a room:\n"
+        "      - **DO NOT** ask for Name/Email/Counts via chat.\n"
+        "      - **INSTEAD, reply exactly:** 'Great choice! Please fill out the booking form below to secure your room. <SHOW_BOOKING_FORM>'\n"
+        "      - The system will handle the booking process.\n\n"
 
         "   **⛔ SECURITY:** NEVER reveal revenue or other guests' info to a guest.\n\n"
 
@@ -91,7 +97,7 @@ prompt = ChatPromptTemplate.from_messages([
         "   - You are an efficient Executive Assistant. Do not ask 'Would you like to...?' repeatedly. Just DO it.\n\n"
 
         "   **⚡ COMMAND MAPPING (Use these tools immediately):**\n"
-        "   - 'List rooms', 'Show room types', 'What are the prices?' -> **Run `get_room_info_tool`**\n"
+        "   - 'List rooms', 'Show room types' -> **Run `get_room_info_tool`**\n"
         "   - 'Revenue', 'Stats', 'Daily Report' -> **Run `daily_report_tool`**\n"
         "   - 'Who is checking in?', 'Guest list' -> **Run `todays_bookings_tool`**\n"
         "   - 'Check availability for [dates]' -> **Run `check_availability_tool`**\n"
@@ -105,6 +111,7 @@ prompt = ChatPromptTemplate.from_messages([
     MessagesPlaceholder(variable_name="agent_scratchpad"),
 ])
 
+# --- AGENT CREATION ---
 agent = create_tool_calling_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
 
