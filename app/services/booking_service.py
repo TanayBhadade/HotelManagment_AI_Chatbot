@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.db.repositories.booking_repo import BookingRepository
 from app.db.models import Room
-from app.services.email_service import EmailService  # <--- IMPORTED
+from app.services.email_service import EmailService
 from dateutil import parser
 from datetime import datetime
 

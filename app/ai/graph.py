@@ -1,26 +1,28 @@
-import os
-import sys
 import operator
+import traceback
 from typing import TypedDict, Annotated, List
-from dotenv import load_dotenv
-from app.ai.tools.guest_info import get_guest_info_tool
 
 from langchain_groq import ChatGroq
-import operator
-from typing import TypedDict, Annotated, List
-from langchain_groq import ChatGroq
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
-from langchain_core.tools import tool
-from langgraph.graph import StateGraph, END
+from langchain_core.messages import SystemMessage, AIMessage, BaseMessage
+from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+
 from app.core.config import settings
+
+# --- IMPORT ALL TOOLS ---
 from app.ai.tools.availability import check_availability_tool
 from app.ai.tools.booking import book_room_tool
-from app.core.config import settings
+from app.ai.tools.guest_info import get_guest_info_tool
+from app.ai.tools.stats import hotel_stats_tool
 
-# Define the tools list
-tools = [check_availability_tool, book_room_tool]
-tools = [check_availability_tool, book_room_tool, get_guest_info_tool]
+# ============================================================
+# 1. DEFINE TOOLKITS
+# ============================================================
+guest_tools = [check_availability_tool, book_room_tool]
+manager_tools = [hotel_stats_tool, get_guest_info_tool, check_availability_tool]
+
+# Master list for the ToolNode
+all_tools = [check_availability_tool, book_room_tool, get_guest_info_tool, hotel_stats_tool]
 
 # ============================================================
 # 2. SETUP LLM
@@ -30,14 +32,12 @@ llm = ChatGroq(
     temperature=0,
     api_key=settings.GROQ_API_KEY
 )
-llm_with_tools = llm.bind_tools(tools)
 
 
 # ============================================================
 # 3. DEFINE STATE
 # ============================================================
 class AgentState(TypedDict):
-    # 'operator.add' appends new messages to the history list
     messages: Annotated[List[BaseMessage], operator.add]
     user_role: str
 
@@ -47,114 +47,80 @@ class AgentState(TypedDict):
 # ============================================================
 def chatbot_node(state: AgentState):
     """
-    Bulletproof chatbot node with error handling, history management,
-    and strict anti-hallucination prompts.
+    Decides which Persona (Guest vs Manager) to run.
     """
-
-    # --- A. SAFE STATE EXTRACTION ---
     try:
         messages = state.get("messages", [])
         role = state.get("user_role", "guest")
 
-        if not isinstance(messages, list):
-            messages = []
-        if role not in ["guest", "manager"]:
-            role = "guest"
+        # --- A. SELECT PERSONA ---
+        if role == "manager":
+            tools_subset = manager_tools
+            system_prompt = (
+                "You are the **Grand Hotel Executive Assistant**.\n"
+                "**PROTOCOL:**\n"
+                "1. If asked 'Status' or 'Revenue', run `hotel_stats_tool`.\n"
+                "2. If asked about a guest, run `get_guest_info_tool`.\n"
+                "3. Summarize the data clearly.\n"
+                "**STRICT:** Do not book rooms. You are an analyst."
+            )
+        else:
+            # 🛎️ GUEST PERSONA
+            tools_subset = guest_tools
+            system_prompt = (
+                "You are the **Grand Hotel Concierge**. Warm, professional, and precise.\n\n"
+                "**GOAL:** Help the user book a room. Collect: Dates, Room, Guest Count, Name, Email.\n\n"
+                "**PROTOCOL:**\n"
+                "1. **Inquiry:** Confirm features (if asked). "
+                "2. **Dates First:** IF you do not have check-in/out dates, ASK for them. **DO NOT call `check_availability_tool` without valid dates.**\n"
+                "3. **Check:** Once you have dates, use `check_availability_tool`.\n"
+                "4. **Offer:** Show Rooms. Filter irrelevant ones.\n"
+                "5. **Details:** Ask for Guest Count (Adults/Children).\n"
+                "6. **Finalize:** Ask Name/Email -> `book_room_tool`.\n\n"
 
-    except Exception as e:
-        return {
-            "messages": [AIMessage(content="System Error: State extraction failed.")],
-        }
+                "**🚨 CRITICAL RULES:**\n"
+                "- **NO GUESSING:** Never call a tool with placeholders like 'YYYY-MM-DD'. If parameters are missing, ASK the user.\n"
+                "- **STOPPING RULE:** Once `book_room_tool` returns 'Success', stop. Say: 'Booking confirmed! Check your email.'\n"
+                "- **VOICE:** Never say 'I will use the tool'. Just say 'I am checking availability now'."
+            )
 
-    # --- B. BUILD SYSTEM PROMPT ---
-    if role == "guest":
-        system_prompt = (
-            "You are the **Grand Hotel Concierge**. Warm, professional, and precise.\n\n"
-            "**STRICT BOOKING PROTOCOL (FOLLOW ORDER):**\n"
-            "1. **Inquiry:** If user asks to book, FIRST ask: 'What dates would you like to stay?'\n"
-            "2. **Check:** Once you have dates, use `check_availability_tool`. DO NOT guess availability.\n"
-            "3. **Offer:** Show the available rooms. **IMPORTANT:** If the user asked for specific features (e.g., 'city view', 'balcony'), ONLY list the rooms that match those features. Do not show irrelevant rooms.\n"
-            "4. **Book:** ONLY when user selects a specific room, say exactly:\n"
-            "   'Great choice! To confirm your booking, please provide your **Full Name** and **Email Address**.'\n\n"
-            "**RULES:**\n"
-            "- Capture the name/email from their reply and use the 'book_room_tool'.\n"
-            "- If availability tool returns nothing, apologize and suggest new dates."
-        )
-    elif role == "manager":
-        system_prompt = (
-            "You are the **Grand Hotel Executive Assistant**. You provide high-level administrative "
-            "support and business intelligence to the Hotel Manager.\n\n"
-            "**PROHIBITED ACTIONS:**\n"
-            "- DO NOT attempt to book rooms.\n"
-            
-            "**REQUIRED ACTIONS:**\n"
-            "- Provide summaries of bookings, revenue insights, and room occupancy stats.\n"
-            "- Use the available tools to query the database for current records.\n"
-            "- Be concise, professional, and focus on data trends."
-            "- If the manager asks about a guest, use the `get_guest_info_tool`.\n"
-            "- You must ask for the guest's email if they haven't provided it.\n\n"
-        )
+        # --- B. BIND TOOLS ---
+        llm_with_specific_tools = llm.bind_tools(tools_subset)
 
-    sys_msg = SystemMessage(content=system_prompt)
+        # --- C. CONTEXT MANAGEMENT (Fixed Window) ---
+        sys_msg = SystemMessage(content=system_prompt)
 
-    # --- C. CONTEXT MANAGEMENT (SLIDING WINDOW) ---
-    try:
-        # Filter out old SystemMessages to prevent duplicates stacking up
+        # Filter history (Keep last 50 messages)
         history = [m for m in messages if not isinstance(m, SystemMessage)]
+        if len(history) > 50:
+            history = history[-50:]
 
-        # Keep only last 20 messages to prevent hitting token limits (Latency Optimization)
-        if len(history) > 20:
-            history = history[-20:]
-
-        # Validated message list
         full_conversation = [sys_msg] + history
 
-    except Exception:
-        full_conversation = [sys_msg] + messages[-5:]  # Emergency fallback
-
-    # --- D. INVOKE LLM ---
-    try:
-        response = llm_with_tools.invoke(full_conversation)
+        # --- D. INVOKE ---
+        response = llm_with_specific_tools.invoke(full_conversation)
         return {"messages": [response]}
 
     except Exception as e:
+        # 🚨 DEBUG: Print the actual error to the terminal so we can fix it
+        print(f"\n❌ CRITICAL ERROR IN CHATBOT NODE: {e}\n")
+        traceback.print_exc()
+
         return {
             "messages": [AIMessage(content="I'm experiencing high traffic. Please try again.")],
         }
 
 
 # ============================================================
-# 5. SAFETY WRAPPER
-# ============================================================
-def safe_chatbot_node(state: AgentState):
-    """
-    Catches ANY crash in the main logic to keep the server alive.
-    """
-    try:
-        return chatbot_node(state)
-    except Exception as e:
-        return {
-            "messages": [AIMessage(content="Critical System Error. Please reset the chat.")],
-        }
-
-
-# ============================================================
-# 6. BUILD THE GRAPH
+# 5. BUILD THE GRAPH
 # ============================================================
 workflow = StateGraph(AgentState)
 
-# Add Nodes
-workflow.add_node("agent", safe_chatbot_node)  # Use the safe wrapper!
-workflow.add_node("tools", ToolNode(tools))
+workflow.add_node("agent", chatbot_node)
+workflow.add_node("tools", ToolNode(all_tools))
 
-# Define Flow
 workflow.set_entry_point("agent")
-
-# Logic: If Agent calls a tool -> go to Tools. Otherwise -> END.
 workflow.add_conditional_edges("agent", tools_condition)
-
-# Logic: After Tools run -> go back to Agent to interpret results.
 workflow.add_edge("tools", "agent")
 
-# Compile
 app_graph = workflow.compile()
