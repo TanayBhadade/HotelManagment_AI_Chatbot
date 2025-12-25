@@ -3,6 +3,7 @@ import sys
 import operator
 from typing import TypedDict, Annotated, List
 from dotenv import load_dotenv
+from app.ai.tools.guest_info import get_guest_info_tool
 
 from langchain_groq import ChatGroq
 import operator
@@ -19,6 +20,7 @@ from app.core.config import settings
 
 # Define the tools list
 tools = [check_availability_tool, book_room_tool]
+tools = [check_availability_tool, book_room_tool, get_guest_info_tool]
 
 # ============================================================
 # 2. SETUP LLM
@@ -80,14 +82,17 @@ def chatbot_node(state: AgentState):
         )
     elif role == "manager":
         system_prompt = (
-            "You are the **Executive Manager's Dashboard AI**. You provide business intelligence.\n\n"
+            "You are the **Grand Hotel Executive Assistant**. You provide high-level administrative "
+            "support and business intelligence to the Hotel Manager.\n\n"
             "**PROHIBITED ACTIONS:**\n"
             "- DO NOT attempt to book rooms.\n"
-            "- DO NOT ask for guest names or emails.\n\n"
+            
             "**REQUIRED ACTIONS:**\n"
             "- Provide summaries of bookings, revenue insights, and room occupancy stats.\n"
             "- Use the available tools to query the database for current records.\n"
             "- Be concise, professional, and focus on data trends."
+            "- If the manager asks about a guest, use the `get_guest_info_tool`.\n"
+            "- You must ask for the guest's email if they haven't provided it.\n\n"
         )
 
     sys_msg = SystemMessage(content=system_prompt)
