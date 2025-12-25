@@ -3,13 +3,13 @@ import traceback
 from typing import TypedDict, Annotated, List
 
 from langchain_groq import ChatGroq
-from langchain_core.messages import SystemMessage, AIMessage, BaseMessage
+from langchain_core.messages import SystemMessage, AIMessage, BaseMessage, ToolMessage
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from app.core.config import settings
 
-# --- IMPORT ALL TOOLS ---
+# --- IMPORT TOOLS ---
 from app.ai.tools.availability import check_availability_tool
 from app.ai.tools.booking import book_room_tool
 from app.ai.tools.guest_info import get_guest_info_tool
@@ -20,15 +20,14 @@ from app.ai.tools.stats import hotel_stats_tool
 # ============================================================
 guest_tools = [check_availability_tool, book_room_tool]
 manager_tools = [hotel_stats_tool, get_guest_info_tool, check_availability_tool]
-
-# Master list for the ToolNode
 all_tools = [check_availability_tool, book_room_tool, get_guest_info_tool, hotel_stats_tool]
 
 # ============================================================
-# 2. SETUP LLM
+# 2. SETUP LLM (SWITCHED TO FASTER MODEL)
 # ============================================================
 llm = ChatGroq(
-    model_name="llama-3.3-70b-versatile",
+    # ✅ USE THIS MODEL: It is faster, cheaper, and less likely to loop.
+    model_name="llama-3.1-8b-instant",
     temperature=0,
     api_key=settings.GROQ_API_KEY
 )
@@ -46,9 +45,6 @@ class AgentState(TypedDict):
 # 4. THE BRAIN (CHATBOT NODE)
 # ============================================================
 def chatbot_node(state: AgentState):
-    """
-    Decides which Persona (Guest vs Manager) to run.
-    """
     try:
         messages = state.get("messages", [])
         role = state.get("user_role", "guest")
@@ -62,7 +58,10 @@ def chatbot_node(state: AgentState):
                 "1. If asked 'Status' or 'Revenue', run `hotel_stats_tool`.\n"
                 "2. If asked about a guest, run `get_guest_info_tool`.\n"
                 "3. Summarize the data clearly.\n"
-                "**STRICT:** Do not book rooms. You are an analyst."
+                "**STRICT:** Do not book rooms. You are an analyst.\n"
+                "**CRITICAL ANTI-LOOP RULE:** If you have just called a tool and received an output"
+                "**DO NOT** call the same tool again immediately. Read the tool output carefully. If it contains the answer, STOP and inform the user."
+
             )
         else:
             # 🛎️ GUEST PERSONA
@@ -82,32 +81,32 @@ def chatbot_node(state: AgentState):
                 "- **NO GUESSING:** Never call a tool with placeholders like 'YYYY-MM-DD'. If parameters are missing, ASK the user.\n"
                 "- **MULTIPLE BOOKINGS:** A single guest (same email) CAN book multiple rooms. Do not block this.\n"
                 "- **STOPPING RULE:** Once `book_room_tool` returns 'Success', stop. Say: 'Booking confirmed! Check your email.'\n"
-                "- **VOICE:** Never say 'I will use the tool'. Just say 'I am checking availability now'."
-                "- **CONTEXT:** If the user gives all info at once, book immediately."
+                "- **VOICE:** Never say 'I will use the tool'. Just say 'I am checking availability now'.\n"
+                "- **CRITICAL ANTI-LOOP RULE:** If you have just called a tool and received an output, **DO NOT** call the same tool again immediately. Read the tool output carefully. If it contains the answer, STOP and inform the user."
             )
 
         # --- B. BIND TOOLS ---
         llm_with_specific_tools = llm.bind_tools(tools_subset)
 
-        # --- C. CONTEXT MANAGEMENT (Fixed Window) ---
+        # --- C. CONTEXT MANAGEMENT (FIXED) ---
         sys_msg = SystemMessage(content=system_prompt)
 
-        # Filter history (Keep last 50 messages)
+        # ✅ FIX: Keep last 30 messages.
+        # (10 was too small and caused the AI to forget it called the tool)
         history = [m for m in messages if not isinstance(m, SystemMessage)]
-        if len(history) > 50:
-            history = history[-50:]
+        if len(history) > 30:
+            history = history[-30:]
 
         full_conversation = [sys_msg] + history
 
         # --- D. INVOKE ---
+        print(f"🤖 AI Thinking... (History Length: {len(full_conversation)})")  # Debug print
         response = llm_with_specific_tools.invoke(full_conversation)
         return {"messages": [response]}
 
     except Exception as e:
-        # 🚨 DEBUG: Print the actual error to the terminal so we can fix it
         print(f"\n❌ CRITICAL ERROR IN CHATBOT NODE: {e}\n")
         traceback.print_exc()
-
         return {
             "messages": [AIMessage(content="I'm experiencing high traffic. Please try again.")],
         }
