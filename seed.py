@@ -2,6 +2,7 @@ import logging
 import sys
 import hashlib
 
+
 # CORRECT IMPORTS FOR NEW ARCHITECTURE
 from app.db.session import engine, SessionLocal
 from app.db.models import Base, Room, User
