@@ -72,8 +72,8 @@ class BookingService:
         # 5. Create Booking
         booking = self.repo.create_booking(room.id, guest.id, start, end, adults, children)
 
-        # 6. SEND EMAILS (The New Part!) 📧
+        # 6. SEND EMAIL
+        # ✅ ONLY send to Guest (Manager gets the Daily Report at 12 PM)
         self.emailer.send_guest_confirmation(name, email, room_number, start_str, end_str)
-        self.emailer.send_manager_alert(name, room_number, start_str)
 
         return f"Success! Booking #{booking.id} confirmed. Confirmation email sent to {email}."

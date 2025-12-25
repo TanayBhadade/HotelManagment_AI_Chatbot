@@ -8,12 +8,11 @@ from app.core.config import settings
 
 class EmailService:
     def __init__(self):
-        # Load from Settings
         self.sender_email = settings.EMAIL_SENDER
         self.manager_email = settings.EMAIL_MANAGER or "admin@grandhotel.com"
 
-        # Passwords usually stay in env or retrieved securely
-        self.sender_password = os.getenv("EMAIL_PASSWORD")
+        # ✅ FIX: Load from Settings, not os.getenv
+        self.sender_password = settings.EMAIL_PASSWORD
 
         self.smtp_server = settings.SMTP_SERVER
         self.smtp_port = settings.SMTP_PORT

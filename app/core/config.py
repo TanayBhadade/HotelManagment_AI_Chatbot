@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # We use aliases so python variables stay clean but map to your specific .env names
     EMAIL_SENDER: str | None = None
     EMAIL_MANAGER: str | None = None
+    EMAIL_PASSWORD: str | None = None
     SMTP_SERVER: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
 
