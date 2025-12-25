@@ -1,31 +1,37 @@
 import smtplib
+import os
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import os
+from app.core.config import settings
 
 
 class EmailService:
     def __init__(self):
-        # Load credentials from .env
-        self.sender_email = os.getenv("EMAIL_USER")
+        # Load from Settings
+        self.sender_email = settings.EMAIL_SENDER
+        self.manager_email = settings.EMAIL_MANAGER or "admin@grandhotel.com"
+
+        # Passwords usually stay in env or retrieved securely
         self.sender_password = os.getenv("EMAIL_PASSWORD")
-        self.manager_email = os.getenv("MANAGER_EMAIL", "admin@grandhotel.com")
-        self.smtp_server = "smtp.gmail.com"
-        self.smtp_port = 587
+
+        self.smtp_server = settings.SMTP_SERVER
+        self.smtp_port = settings.SMTP_PORT
 
     def _send(self, to_email: str, subject: str, body: str):
         """Internal helper to send email or mock it."""
 
-        # 1. MOCK MODE (If no credentials in .env, just print it)
+        # MOCK MODE
         if not self.sender_email or not self.sender_password:
-            print("=" * 60)
-            print(f"📧 [MOCK EMAIL] To: {to_email}")
-            print(f"Subject: {subject}")
-            print(f"Body:\n{body}")
-            print("=" * 60)
+            print(f"\n{'=' * 20} 📧 EMAIL SIMULATION {'=' * 20}")
+            print(f"FROM:    {self.sender_email or 'system@grandhotel.com'}")
+            print(f"TO:      {to_email}")
+            print(f"SUBJECT: {subject}")
+            print(f"BODY:\n{body}")
+            print(f"{'=' * 58}\n")
             return True
 
-        # 2. REAL MODE (Sends actual email)
+        # REAL MODE
         try:
             msg = MIMEMultipart()
             msg['From'] = self.sender_email
@@ -44,7 +50,7 @@ class EmailService:
             return False
 
     def send_guest_confirmation(self, name: str, email: str, room: str, start: str, end: str):
-        subject = f"Booking Confirmation - Room {room}"
+        subject = f"✅ Booking Confirmed - Room {room}"
         body = f"""Dear {name},
 
 We are delighted to confirm your stay at Grand Hotel.
@@ -58,7 +64,15 @@ See you soon!
 Grand Hotel Concierge"""
         return self._send(email, subject, body)
 
-    def send_manager_alert(self, name: str, room: str, start: str):
-        subject = f"🚨 New Booking: Room {room}"
-        body = f"Guest {name} has just booked Room {room} starting {start}."
+    def send_daily_report(self, report_content: str):
+        """Sends the Daily Summary to the Manager."""
+        subject = f"📊 Daily Hotel Report - {datetime.now().strftime('%Y-%m-%d')}"
+        body = f"""DAILY OPERATIONS REPORT
+
+Here is the summary of bookings and occupancy:
+
+{report_content}
+
+End of Report.
+Grand Hotel System"""
         return self._send(self.manager_email, subject, body)
