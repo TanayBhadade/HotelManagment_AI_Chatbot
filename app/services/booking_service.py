@@ -3,6 +3,7 @@ from app.db.repositories.booking_repo import BookingRepository
 from app.db.models import Room
 from app.services.email_service import EmailService  # <--- IMPORTED
 from dateutil import parser
+from datetime import datetime
 
 
 class BookingService:
@@ -18,6 +19,16 @@ class BookingService:
         except (ValueError, TypeError):
             return "Error: Invalid date format. Please use YYYY-MM-DD."
 
+
+        # We compare the "date" part only (ignoring time)
+        if start.date() < datetime.now().date():
+            return f"Error: You cannot book dates in the past. Today is {datetime.now().strftime('%Y-%m-%d')}."
+
+        # 🛑 NEW RULE: End date must be after Start date
+        if end <= start:
+            return "Error: Check-out date must be after Check-in date."
+
+        # ... Existing Logic (Database Query) ...
         available_rooms = self.repo.get_available_rooms(start, end)
 
         if not available_rooms:
@@ -25,8 +36,6 @@ class BookingService:
 
         response = ["Available Rooms:"]
         for room in available_rooms:
-            # ✅ FIX: We added 'room.description' here!
-            # Now the AI can read "City View" and filter the list for the user.
             response.append(
                 f"- Room {room.room_number} ({room.room_type}): Rs. {room.price} | {room.description}"
             )
