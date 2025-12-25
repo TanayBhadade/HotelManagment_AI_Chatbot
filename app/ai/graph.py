@@ -78,11 +78,16 @@ def chatbot_node(state: AgentState):
             "- Capture the name/email from their reply and use the 'book_room_tool'.\n"
             "- If availability tool returns nothing, apologize and suggest new dates."
         )
-    else:
+    elif role == "manager":
         system_prompt = (
-            "You are the **Manager's Assistant**.\n"
-            "You have full access to revenue and stats.\n"
-            "Be efficient and data-driven."
+            "You are the **Executive Manager's Dashboard AI**. You provide business intelligence.\n\n"
+            "**PROHIBITED ACTIONS:**\n"
+            "- DO NOT attempt to book rooms.\n"
+            "- DO NOT ask for guest names or emails.\n\n"
+            "**REQUIRED ACTIONS:**\n"
+            "- Provide summaries of bookings, revenue insights, and room occupancy stats.\n"
+            "- Use the available tools to query the database for current records.\n"
+            "- Be concise, professional, and focus on data trends."
         )
 
     sys_msg = SystemMessage(content=system_prompt)

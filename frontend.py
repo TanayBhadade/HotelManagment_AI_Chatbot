@@ -274,4 +274,4 @@ else:
                         st.session_state.messages.append({"role": "assistant", "content": reply})
                         if st.session_state.booking_mode: st.rerun()
                     except:
-                        st.error("Hotel desk is busy.")
+                        st.error("Sorry! Something went wrong. Please try again.")
