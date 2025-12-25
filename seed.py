@@ -1,18 +1,20 @@
 import logging
 import sys
-from datetime import datetime, timedelta
+import hashlib
+
+# CORRECT IMPORTS FOR NEW ARCHITECTURE
+from app.db.session import engine, SessionLocal
+from app.db.models import Base, Room, User
 from sqlalchemy.exc import SQLAlchemyError
-from database.connection import engine, SessionLocal
-from database.models import Base, Room, Guest, Booking, User
-from auth import hash_password  # Import our new auth tool
+from app.core.security import get_password_hash
 
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%H:%M:%S"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def simple_hash(password: str):
+    """A simple hash for demo purposes (SHA256)."""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
 def reset_database():
@@ -36,7 +38,7 @@ def seed_users(db):
     manager = User(
         username="manager",
         email="admin@grandhotel.com",
-        hashed_password=hash_password("admin123"),  # Default Password
+        hashed_password=get_password_hash("admin123"),
         role="manager"
     )
 
@@ -44,39 +46,28 @@ def seed_users(db):
     guest = User(
         username="guest",
         email="guest@example.com",
-        hashed_password=hash_password("guest123"),  # Default Password
+        hashed_password=get_password_hash("guest123"),
         role="guest"
     )
 
     db.add_all([manager, guest])
     db.commit()
-    logger.info("✅ Users created: 'manager' (pass: admin123) and 'guest' (pass: guest123)")
+    logger.info("✅ Users created: 'manager' / 'guest'")
 
 
 def seed_rooms(db):
     """Populates room inventory."""
     room_config = [
-        {"type": "Standard Queen", "price": 1400.0, "capacity": 2, "count": 6,
+        {"type": "Standard Queen", "price": 1400.0, "capacity": 2, "count": 4,
          "desc": "Cozy queen bed, great for couples."},
-        {"type": "Standard Twin", "price": 1450.0, "capacity": 2, "count": 4,
-         "desc": "Two twin beds, perfect for friends."},
-        {"type": "Deluxe King", "price": 2600.0, "capacity": 3, "count": 5,
-         "desc": "King bed with city view and a lounge chair."},
-        {"type": "Deluxe Family", "price": 3200.0, "capacity": 4, "count": 4,
-         "desc": "King + sofa bed, mini living area—family friendly."},
-        {"type": "Executive", "price": 3800.0, "capacity": 2, "count": 3,
-         "desc": "Quiet floor, workspace, premium amenities."},
-        {"type": "Studio Suite", "price": 4200.0, "capacity": 3, "count": 3,
-         "desc": "Open-plan suite with seating area."},
-        {"type": "One-Bedroom Suite", "price": 5200.0, "capacity": 4, "count": 2,
-         "desc": "Separate bedroom + living room, great for longer stays."},
-        {"type": "Accessible King", "price": 2400.0, "capacity": 2, "count": 2,
-         "desc": "Accessible layout, roll-in shower, wider clearances."},
-        {"type": "Penthouse", "price": 9500.0, "capacity": 4, "count": 1,
-         "desc": "Top-floor luxury, terrace, sweeping views."},
+        {"type": "Deluxe King", "price": 2600.0, "capacity": 3, "count": 3, "desc": "King bed with city view."},
+        {"type": "Family Suite", "price": 4200.0, "capacity": 4, "count": 2, "desc": "Two beds + living area."},
+        {"type": "Penthouse", "price": 9500.0, "capacity": 6, "count": 1, "desc": "Top floor luxury with terrace."},
     ]
+
     rooms_to_add = []
     room_counter = 100
+
     for config in room_config:
         for _ in range(config["count"]):
             room_counter += 1
@@ -88,6 +79,7 @@ def seed_rooms(db):
                 description=config["desc"]
             )
             rooms_to_add.append(new_room)
+
     db.add_all(rooms_to_add)
     db.commit()
     logger.info(f"✅ Seeded {len(rooms_to_add)} rooms.")
@@ -100,8 +92,8 @@ def main():
     db = SessionLocal()
     try:
         seed_rooms(db)
-        seed_users(db)  # <--- New Step
-        logger.info("🚀 Database Ready! Login with 'manager'/'admin123'")
+        seed_users(db)
+        logger.info("🚀 Database Ready! Login with 'manager' / 'admin123'")
     except Exception as e:
         logger.error(f"❌ Error: {e}")
         db.rollback()

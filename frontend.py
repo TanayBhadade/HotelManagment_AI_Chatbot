@@ -1,8 +1,10 @@
+import time
 import streamlit as st
 import requests
 import os
 from auth import authenticate_user
 from datetime import datetime, timedelta
+from streamlit_lottie import st_lottie
 
 # --- CONFIGURATION ---
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8001")
@@ -12,245 +14,264 @@ st.set_page_config(
     page_title="Grand Hotel AI",
     page_icon="🏨",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# --- 1. INITIALIZE SESSION STATE (MUST BE FIRST) ---
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "user_role" not in st.session_state:
-    st.session_state.user_role = None
-if "username" not in st.session_state:
-    st.session_state.username = None
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "manager_messages" not in st.session_state:
-    st.session_state.manager_messages = []
-if "booking_mode" not in st.session_state:
-    st.session_state.booking_mode = False
+# --- 1. INITIALIZE SESSION STATE ---
+defaults = {
+    "authenticated": False,
+    "user_role": None,
+    "username": None,
+    "messages": [],
+    "manager_messages": [],
+    "booking_mode": False
+}
+
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 
-# --- 2. AUTH FUNCTIONS (UPDATED WITH MEMORY RESET) ---
+# --- 2. LOTTIE LOADER ---
+def load_lottieurl(url: str):
+    try:
+        r = requests.get(url, timeout=5)
+        return r.json() if r.status_code == 200 else None
+    except:
+        return None
+
+
+# Guest-specific Lottie (A service bell or concierge)
+lottie_concierge_url = "https://lottie.host/1c108e9a-603c-40ac-8b4a-be7fbe02fa25/8HSveeLcSU.json"
+lottie_concierge = load_lottieurl(lottie_concierge_url)
+
+# Main page animation
+lottie_hotel = load_lottieurl("https://lottie.host/c4f91792-610c-4db5-ad37-9b3023a4acbb/yPmjEtejH0.json")
+
+
+# --- 3. AUTH & BACKEND FUNCTIONS ---
 def login(username, password):
     user = authenticate_user(username, password)
+    time.sleep(2)  # Manually adds a 2-second 'Wait' for the user to see the loading text
     if user:
-        # 1. TELL BACKEND TO FORGET OLD CHATS (Zombie Memory Fix)
         try:
-            requests.post(f"{API_URL}/reset", json={"role": user.role})
+            # Sync with Backend: Reset memory on new login
+            requests.post(f"{API_URL}/reset", json={"role": user.role}, timeout=2)
         except:
-            pass  # Ignore if backend is down, still allow login
-
-        # 2. SET FRONTEND STATE
+            pass
         st.session_state.authenticated = True
         st.session_state.user_role = user.role
         st.session_state.username = user.username
-        st.session_state.messages = []  # Clear frontend chat too
-        st.session_state.manager_messages = []
         st.rerun()
     else:
-        st.error("❌ Invalid username or password")
+        st.error("❌ Invalid credentials")
 
 
 def logout():
-    # 1. TELL BACKEND TO FORGET
-    if st.session_state.user_role:
-        try:
-            requests.post(f"{API_URL}/reset", json={"role": st.session_state.user_role})
-        except:
-            pass
+    # 1. Create a status container for the 'Check-out' feel
+    with st.status("🛎️ Checking out of the Grand Hotel...", expanded=True) as status:
+        st.write("🧹 Finalizing your room details...")
 
-    # 2. CLEAR FRONTEND
-    st.session_state.authenticated = False
-    st.session_state.user_role = None
-    st.session_state.username = None
-    st.session_state.messages = []
-    st.session_state.booking_mode = False
-    st.rerun()
+        if st.session_state.user_role:
+            try:
+                # Tell the backend to clear memory
+                requests.post(f"{API_URL}/reset", json={"role": st.session_state.user_role}, timeout=2)
+            except:
+                pass
+
+        time.sleep(0.8)  # Manual wait for user to read
+        st.write("✨ We hope to see you again soon!")
+        time.sleep(0.6)
+
+        # 2. Clear frontend state
+        st.session_state.authenticated = False
+        st.session_state.user_role = None
+        st.session_state.messages = []
+        st.session_state.manager_messages = []
+
+        status.update(label="✅ Check-out Complete", state="complete")
+        time.sleep(0.5)
+        st.rerun()
 
 
-# --- 3. CSS STYLING (LUXURY GOLD THEME) ---
-def add_bg_from_url():
+# --- 4. CSS STYLING ---
+def add_custom_style():
     st.markdown(
         f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
-        html, body, [class*="css"] {{ font-family: 'Poppins', sans-serif; }}
-
         .stApp {{
-            background-image: url("https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=2070&auto=format&fit=crop");
+            background-image: url("https://images.unsplash.com/photo-1722763529109-2bcb289a47c3?q=80&w=1615&auto=format&fit=cover&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D");
             background-attachment: fixed; background-size: cover;
         }}
-        [data-testid="stSidebar"] {{ background-color: rgba(20, 20, 20, 0.95); border-right: 2px solid #d4af37; }}
-        [data-testid="stSidebar"] * {{ color: #d4af37 !important; }}
-
-        /* FORM STYLING */
+        h1, h2, h3, p, span, label {{
+            color: white !important;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            font-family: 'Poppins', sans-serif;
+        }}
         div[data-testid="stForm"] {{
-            background-color: rgba(255, 255, 255, 0.98);
-            padding: 30px;
+            background: rgba(0, 0, 0, 0.75) !important;
+            backdrop-filter: blur(15px);
+            border: 2px solid #d4af37 !important;
+            border-radius: 20px;
+            padding: 40px;
+        }}
+        /* Unified Luxury Container for the Icon */
+        .lottie-container {{
+            background: rgba(0, 0, 0, 0.4) !important;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 50%;
+            box-shadow: 0px 0px 35px rgba(212, 175, 55, 0.5);
+            border: 2px solid rgba(212, 175, 55, 0.3);
+            width: 220px;
+            height: 220px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }}
+        .stChatMessage {{
+            background: rgba(255, 255, 255, 0.1) !important;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-left: 5px solid #d4af37;
             border-radius: 15px;
-            border: 2px solid #d4af37;
-            box-shadow: 0px 4px 20px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
         }}
-
-        div[data-testid="stForm"] input, div[data-testid="stForm"] textarea {{
-            background-color: #f8f9fa !important;
-            color: #333333 !important;
-            border: 1px solid #ccc !important;
+        .stButton button {{
+            background-color: #d4af37 !important;
+            color: black !important;
+            font-weight: bold !important;
+            border-radius: 10px !important;
         }}
-        div[data-testid="stForm"] label {{ color: #d4af37 !important; font-weight: 600 !important; }}
-
-        .stChatMessage {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 15px; padding: 10px; border-left: 5px solid #d4af37; color: black !important; }}
-        .stChatMessage p, .stChatMessage div {{ color: #000000 !important; }}
-
-        .stButton button {{ background-color: #d4af37; color: white; font-weight: bold; border-radius: 8px; border: none; }}
-        .stButton button:hover {{ background-color: #bfa15f; }}
         </style>
         """,
         unsafe_allow_html=True
     )
 
 
-add_bg_from_url()
+add_custom_style()
 
-# --- 4. SIDEBAR ---
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/201/201623.png", width=80)
-    st.title("Grand Hotel")
-    st.markdown("---")
-
-    if not st.session_state.authenticated:
-        st.subheader("🔐 Login Required")
-        with st.form("login_form"):
+# --- 5. MAIN LOGIC ---
+if not st.session_state.authenticated:
+    _, col2, _ = st.columns([1, 1.5, 1])
+    with col2:
+        if lottie_hotel:
+            st_lottie(lottie_hotel, height=200, key="login_anim")
+        st.markdown("<h1 style='text-align: center;'>Grand Hotel AI</h1>", unsafe_allow_html=True)
+        with st.form("centered_login"):
             user = st.text_input("Username")
             pw = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Login")
-            if submitted:
-                login(user, pw)
-        st.info("Logins:\nManager: `manager`/`admin123`\nGuest: `guest`/`guest123`")
-    else:
-        st.success(f"Welcome, {st.session_state.username}")
+            if st.form_submit_button("ENTER THE GRAND HOTEL"):
+                with st.status("🏨 Connecting to Grand Hotel Systems...", expanded=True) as status:
+                    st.write("🔐 Verifying secure credentials...")
+                    login(user, pw)
+                    status.update(label="✅ Welcome to the Grand Hotel!", state="complete")
+        st.markdown(
+            "<div style='text-align:center;'><small style='color:#d4af37;'>manager/admin123 | guest/guest123</small></div>",
+            unsafe_allow_html=True)
+
+else:
+    # --- LOGGED IN CONTENT ---
+    with st.sidebar:
+        # Move this to the VERY TOP of the sidebar
+        if st.session_state.user_role == "guest":
+            if lottie_concierge:
+                st_lottie(lottie_concierge, height=150, key="guest_sidebar_anim")
+            else:
+                # Fallback if URL fails
+                st.markdown("🛎️")
+
+        st.title("🏨 Grand Hotel")
+
+        st.write(f"Welcome, **{st.session_state.username}**")
         if st.session_state.user_role == "manager":
-            st.markdown("---")
-            st.subheader("⚡ Manager Actions")
-            if st.button("📄 Email Daily Report"):
-                with st.spinner("Generating..."):
-                    try:
-                        requests.post(f"{API_URL}/trigger-report")
-                        st.success("Report Sent!")
-                    except:
-                        st.error("Connection Failed")
-        st.markdown("---")
+            if st.button("📄 Send Daily Report"):
+                try:
+                    requests.post(f"{API_URL}/trigger-report")
+                    st.toast("Report Sent to Admin!", icon="📧")
+                except:
+                    st.error("Backend offline")
         if st.button("Logout"):
             logout()
 
-# --- 5. MAIN CONTENT ---
-if not st.session_state.authenticated:
-    st.title("🏨 Welcome to Grand Hotel")
-    st.markdown("### Please login via the sidebar to continue.")
-
-else:
-    # === MANAGER ===
+    # MANAGER DASHBOARD
     if st.session_state.user_role == "manager":
-        st.title("📊 Manager Dashboard")
-        st.info("💡 **Tip:** Ask about 'Future bookings' or 'Check-ins today'.")
-        st.markdown("---")
-
+        st.title("📊 Manager Insights")
         for msg in st.session_state.manager_messages:
             with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👨‍💼"):
-                st.markdown(msg["content"])
+                st.write(msg["content"])
 
-        if prompt := st.chat_input("Ask about hotel status..."):
+        if prompt := st.chat_input("Ask about bookings..."):
             st.session_state.manager_messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👨‍💼"):
-                st.markdown(prompt)
+                st.write(prompt)
 
             with st.chat_message("assistant", avatar="🤖"):
-                with st.spinner("Analyzing Database..."):
+                with st.spinner("Querying Database..."):
                     try:
-                        res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "manager"}, timeout=30)
-                        reply = res.json().get("response",
-                                               "Error") if res.status_code == 200 else f"Error: {res.status_code}"
+                        res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "manager"})
+                        reply = res.json().get("response", "Error")
+                        st.write(reply)
+                        st.session_state.manager_messages.append({"role": "assistant", "content": reply})
                     except:
-                        reply = "❌ Connection Error."
-                    st.markdown(reply)
-            st.session_state.manager_messages.append({"role": "assistant", "content": reply})
+                        st.error("Connection Lost.")
 
-    # === GUEST ===
+    # GUEST CONCIERGE
     elif st.session_state.user_role == "guest":
-        st.title("🛎️ Concierge Service")
-
+        st.title("🛎️ Grand Hotel Service")
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"], avatar="🤵" if msg["role"] == "assistant" else "👤"):
-                st.markdown(msg["content"])
+                st.write(msg["content"])
 
-        # BOOKING FORM (Conditional)
         if st.session_state.booking_mode:
-            st.markdown("---")
-            with st.container():
-                st.markdown("<h3 style='color: #d4af37; text-align: center;'>✨ Finalize Your Reservation</h3>",
-                            unsafe_allow_html=True)
-                with st.form("booking_form"):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        name = st.text_input("Full Name", placeholder="e.g. John Doe")
-                    with c2:
-                        email = st.text_input("Email Address", placeholder="e.g. john@example.com")
-
-                    st.markdown("---")
-                    c3, c4 = st.columns(2)
-                    with c3:
-                        room_no = st.text_input("Room Number", placeholder="e.g. 101")
-                    with c4:
-                        tomorrow = datetime.now() + timedelta(days=1)
-                        dates = st.date_input("Dates", value=(tomorrow, tomorrow + timedelta(days=2)),
-                                              min_value=datetime.now())
-
-                    c5, c6 = st.columns(2)
-                    with c5:
-                        adults = st.number_input("Adults", 1, 4, 1)
-                    with c6:
-                        children = st.number_input("Children", 0, 4, 0)
-
-                    if st.form_submit_button("✅ Confirm Booking", type="primary"):
-                        if not name or not email or not room_no or len(dates) != 2:
-                            st.error("⚠️ Missing details.")
+            with st.form("guest_booking"):
+                st.markdown("<h3 style='color:#d4af37;'>Complete Reservation</h3>", unsafe_allow_html=True)
+                name = st.text_input("Name")
+                email = st.text_input("Email")
+                room = st.text_input("Room #")
+                dates = st.date_input("Stay Dates", value=(datetime.now(), datetime.now() + timedelta(days=2)))
+                if st.form_submit_button("Confirm Booking"):
+                    # NOTE: This endpoint (/book) needs to exist in your API!
+                    # If you are using the Chat-Only flow, you might want to disable this section.
+                    payload = {
+                        "room_number": room, "name": name, "email": email,
+                        "start_date": str(dates[0]), "end_date": str(dates[1]),
+                        "adults": 1, "children": 0
+                    }
+                    try:
+                        res = requests.post(f"{API_URL}/book", json=payload)
+                        if res.status_code == 200:
+                            st.balloons()
+                            st.success("Booking Confirmed!")
+                            st.session_state.booking_mode = False
+                            time.sleep(2)
+                            st.rerun()
                         else:
-                            try:
-                                payload = {
-                                    "room_number": room_no, "name": name, "email": email,
-                                    "start_date": dates[0].strftime("%Y-%m-%d"),
-                                    "end_date": dates[1].strftime("%Y-%m-%d"),
-                                    "adults": adults, "children": children
-                                }
-                                with st.spinner("Booking..."):
-                                    res = requests.post(f"{API_URL}/book", json=payload)
-                                    if res.status_code == 200 and "Success" in res.json().get("status", ""):
-                                        st.success("🎉 Confirmed!")
-                                        st.session_state.booking_mode = False
-                                        st.session_state.messages.append(
-                                            {"role": "assistant", "content": f"✅ Booked Room {room_no} for {name}."})
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Failed: {res.json().get('status')}")
-                            except Exception as e:
-                                st.error(f"Error: {e}")
+                            st.error(f"Error: {res.text}")
+                    except:
+                        st.error("Could not connect to Booking Server.")
 
-        if prompt := st.chat_input("How can I help you?"):
+        if prompt := st.chat_input("How can I help?"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
-                st.markdown(prompt)
+                st.write(prompt)
 
             with st.chat_message("assistant", avatar="🤵"):
-                with st.spinner("Thinking..."):
+                with st.spinner("The bot is typing..."):
                     try:
-                        res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "guest"}, timeout=30)
+                        res = requests.post(f"{API_URL}/chat", json={"message": prompt, "role": "guest"})
                         reply = res.json().get("response", "Error")
+
+                        # Logic to trigger the Manual Booking Form if the bot asks for it
                         if "<SHOW_BOOKING_FORM>" in reply:
                             st.session_state.booking_mode = True
                             reply = reply.replace("<SHOW_BOOKING_FORM>", "")
-                        st.markdown(reply)
+
+                        st.write(reply)
+                        st.session_state.messages.append({"role": "assistant", "content": reply})
+                        if st.session_state.booking_mode: st.rerun()
                     except:
-                        st.error("Backend Error")
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-            if st.session_state.booking_mode:
-                st.rerun()
+                        st.error("Hotel desk is busy.")
