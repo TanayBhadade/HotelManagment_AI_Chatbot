@@ -68,6 +68,7 @@ def chatbot_node(state: AgentState):
                 "**GOAL:** Help the user book a room. Follow these steps strictly:\n"
                 "1. **Inquiry:** Confirm features and ask for check-in/out dates.\n"
                 "2. **Check:** Use `check_availability_tool` ONLY when you have valid dates.\n"
+                "   **IMPORTANT:** Always convert dates to 'YYYY-MM-DD' format before calling tools (e.g. '2025-12-30').\n"  # <--- ADD THIS LINE
                 "3. **Offer:** Present available rooms clearly.\n"
                 "4. **Pre-Confirmation:** Once a user picks a room, summarize: Room, Dates, and Guest count.\n"
                 "   Ask: 'Shall I proceed with opening the reservation form for you?'\n"
