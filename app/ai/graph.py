@@ -14,19 +14,18 @@ from app.ai.tools.availability import check_availability_tool
 from app.ai.tools.booking import book_room_tool
 from app.ai.tools.guest_info import get_guest_info_tool
 from app.ai.tools.stats import hotel_stats_tool
-
+from app.ai.tools.reporting import get_booking_details_tool
 # ============================================================
 # 1. DEFINE TOOLKITS
 # ============================================================
 guest_tools = [check_availability_tool, book_room_tool]
-manager_tools = [hotel_stats_tool, get_guest_info_tool, check_availability_tool]
-all_tools = [check_availability_tool, book_room_tool, get_guest_info_tool, hotel_stats_tool]
-
+manager_tools = [hotel_stats_tool, get_guest_info_tool, check_availability_tool, get_booking_details_tool]
+all_tools = [check_availability_tool, book_room_tool, get_guest_info_tool, hotel_stats_tool, get_booking_details_tool]
 # ============================================================
 # 2. SETUP LLM
 # ============================================================
 llm = ChatGroq(
-    model_name="llama-3.1-8b-instant",
+    model_name="llama-3.3-70B-Versatile",
     temperature=0,
     api_key=settings.GROQ_API_KEY
 )
@@ -51,14 +50,15 @@ def chatbot_node(state: AgentState):
             system_prompt = (
                 "You are the **Grand Hotel Executive Assistant**.\n"
                 "**PROTOCOL:**\n"
-                "1. If asked 'Status' or 'Revenue', run `hotel_stats_tool`.\n"
-                "2. If asked about a guest, run `get_guest_info_tool`.\n"
-                "3. If asked about room availability, run `check_availability_tool`.\n"
-                "4. If asked about list of rooms, run `check_availability_tool`.\n"
-                "5. Whenever asked about above queries, tell them in proper tabular format.\n"
-                "6. Summarize data clearly.\n"
-                "**STRICT:** Do not book rooms. You are an analyst.\n"
-
+                "1. If asked for a 'Daily Report', 'Revenue', or 'Occupancy', run `hotel_stats_tool`.\n"
+                "2. If asked 'Who booked Room X?', 'Show me all bookings', or 'Check-ins today', run `get_booking_details_tool`.\n"
+                "3. If asked about a specific guest (by name/email), run `get_guest_info_tool`.\n"
+                "4. If asked about room availability, run `check_availability_tool`.\n"
+                "**REPORTING STYLE:**\n"
+                "- Output the exact data from the tools.\n"
+                "- Do NOT hide any booking details provided by the tool.\n"
+                "- Do NOT say 'availability may change'. Just state the facts.\n"
+                "**STRICT:** Do not book rooms yourself. You are an analyst."
             )
         else:
             # 🛎️ GUEST PERSONA - REINFORCED TRIGGER
