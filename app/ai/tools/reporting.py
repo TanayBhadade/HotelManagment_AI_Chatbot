@@ -1,15 +1,16 @@
 from datetime import datetime
+from typing import Optional  # <--- 1. ADD THIS IMPORT
 from langchain_core.tools import tool
 from app.db.session import SessionLocal
 from app.db.models import Booking, Room, Guest
 
 
 @tool
-def get_booking_details_tool(room_number: str = None):
+def get_booking_details_tool(room_number: Optional[str] = None):  # <--- 2. CHANGE THIS LINE
     """
     Fetches booking details for the Manager.
     - If 'room_number' is provided (e.g. "101"), shows who booked that specific room and when.
-    - If NO room_number is provided, shows a list of ALL active and upcoming bookings.
+    - If NO room_number is provided (or None), shows a list of ALL active and upcoming bookings.
     """
     db = SessionLocal()
     try:
@@ -19,8 +20,6 @@ def get_booking_details_tool(room_number: str = None):
         query = db.query(Booking).join(Room).join(Guest)
 
         # FILTER: Show only Active (Currently in-house) or Future bookings
-        # We don't want history from 2 years ago, usually.
-        # Logic: Check-out date must be today or in the future.
         query = query.filter(Booking.check_out_date >= today)
 
         # OPTIONAL FILTER: Specific Room
@@ -39,7 +38,6 @@ def get_booking_details_tool(room_number: str = None):
         report_lines = [header]
         for b in bookings:
             status = "Unknown"
-            # specific logic for status display
             if b.check_in_date.date() <= today < b.check_out_date.date():
                 status = "🟢 In-House"
             elif b.check_in_date.date() > today:
