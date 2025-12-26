@@ -5,7 +5,7 @@ from app.db.models import Room, Booking
 
 
 @tool
-def hotel_stats_tool():
+def hotel_stats_tool(**kwargs):
     """
     Fetches the current 'Daily Status Report' for the hotel.
     Returns:
@@ -27,8 +27,8 @@ def hotel_stats_tool():
         # 2. Find Active Bookings (Guests inside the hotel RIGHT NOW)
         # Logic: Booking starts on or before today, and ends after today
         active_bookings = db.query(Booking).filter(
-            Booking.start_date <= today,
-            Booking.end_date > today
+            Booking.check_in_date <= today,
+            Booking.check_out_date > today
         ).all()
 
         occupied_count = len(active_bookings)

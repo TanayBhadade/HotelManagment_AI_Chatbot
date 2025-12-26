@@ -53,9 +53,12 @@ def chatbot_node(state: AgentState):
                 "**PROTOCOL:**\n"
                 "1. If asked 'Status' or 'Revenue', run `hotel_stats_tool`.\n"
                 "2. If asked about a guest, run `get_guest_info_tool`.\n"
-                "3. Summarize data clearly.\n"
+                "3. If asked about room availability, run `check_availability_tool`.\n"
+                "4. If asked about list of rooms, run `check_availability_tool`.\n"
+                "5. Whenever asked about above queries, tell them in proper tabular format.\n"
+                "6. Summarize data clearly.\n"
                 "**STRICT:** Do not book rooms. You are an analyst.\n"
-                "**ANTI-LOOP:** If you just received tool output, do not call the tool again. Inform the user."
+
             )
         else:
             # 🛎️ GUEST PERSONA - REINFORCED TRIGGER
