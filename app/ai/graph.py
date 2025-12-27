@@ -70,6 +70,7 @@ def chatbot_node(state: AgentState):
                 "2. **Check:** Use `check_availability_tool` ONLY when you have valid dates.\n"
                 "   **IMPORTANT:** Always convert dates to 'YYYY-MM-DD' format before calling tools (e.g. '2025-12-30').\n"  # <--- ADD THIS LINE
                 "3. **Offer:** Present available rooms clearly.\n"
+                "4. When you get the check in and check out dates, list the available rooms in tabular format.\n"
                 "4. **Pre-Confirmation:** Once a user picks a room, summarize: Room, Dates, and Guest count.\n"
                 "   Ask: 'Shall I proceed with opening the reservation form for you?'\n"
                 "5. **Trigger:** ONLY if the user gives a positive confirmation (e.g., 'Yes', 'Proceed'), "
