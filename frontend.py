@@ -81,9 +81,11 @@ if st.session_state.entering:
     st.rerun()
 
 if st.session_state.show_success_animation:
+    # --- PARTY ANIMATION TRIGGER ---
+    st.balloons()  # Party balloons for the celebration
     with st.container():
         st.markdown(
-            '<div class="overlay"><div class="status-icon">🛎️</div><h1 style="color: #d4af37;">RESERVATION CONFIRMED</h1></div>',
+            '<div class="overlay"><div class="status-icon">🛎️</div><h1 style="color: #d4af37;">RESERVATION CONFIRMED</h1><p style="color: white;">Congratulations! We look forward to your stay.</p></div>',
             unsafe_allow_html=True)
     time.sleep(2.5)
     st.session_state.show_success_animation = False
@@ -145,7 +147,9 @@ else:
                         }
                         res = requests.post(f"{API_URL}/book", json=payload)
                         if res.status_code == 200:
-                            st.session_state.booking_mode, st.session_state.show_success_animation = False, True
+                            # Trigger the success state
+                            st.session_state.booking_mode = False
+                            st.session_state.show_success_animation = True
                             st.rerun()
         if st.button("Logout"):
             st.session_state.authenticated = False
